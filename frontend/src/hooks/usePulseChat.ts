@@ -426,7 +426,6 @@ export function usePulseChat() {
     setProfile(null);
     setIsRegistered(false);
     localStorage.removeItem(STORAGE_KEY_PROFILE);
-    localStorage.removeItem(STORAGE_KEY_MESSAGES);
     if (wsRef.current) {
       try {
         wsRef.current.close();

@@ -38,12 +38,35 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
       });
       const data = await res.json();
       if (data.email) {
-        setGoogleUser({
-          email: data.email,
-          name: data.name || data.email.split('@')[0],
-          avatarUrl: data.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${data.email}`
-        });
-        const suggested = data.email
+        const email = data.email.toLowerCase();
+        const avatarUrl = data.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${email}`;
+        const name = data.name || email.split('@')[0];
+
+        const gUser: RealGoogleUser = {
+          email,
+          name,
+          avatarUrl
+        };
+        setGoogleUser(gUser);
+
+        // Check if a constant username handle already exists for this email
+        const savedHandle = localStorage.getItem(`pulsechat_handle_for_${email}`);
+        if (savedHandle && savedHandle.trim()) {
+          // Auto-login with existing persistent username!
+          onLogin({
+            username: savedHandle.trim().toLowerCase(),
+            displayName: name,
+            email: email,
+            avatarUrl: avatarUrl,
+            provider: 'google',
+            status: 'online',
+            activityText: '⚡ Active on PulseChat'
+          });
+          return;
+        }
+
+        // First time Google user: suggest handle and prompt once
+        const suggested = email
           .split('@')[0]
           .replace(/[^a-zA-Z0-9_-]/g, '_')
           .toLowerCase();
@@ -121,12 +144,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     );
 
     if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-      // If popup blocked, redirect directly
       window.location.href = authUrl;
       return;
     }
 
-    // Monitor popup close without login
     const checkTimer = window.setInterval(() => {
       if (!popup || popup.closed) {
         window.clearInterval(checkTimer);
@@ -135,11 +156,14 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     }, 1000);
   };
 
-  // Submit Final Profile
+  // Submit Final Profile for First Time User
   const handleFinalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const handle = chosenUsername.trim().toLowerCase();
     if (!handle || !googleUser) return;
+
+    // Permanently save handle bound to this Google email
+    localStorage.setItem(`pulsechat_handle_for_${googleUser.email}`, handle);
 
     onLogin({
       username: handle,
@@ -217,7 +241,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     />
                   </svg>
                 )}
-                <span>{isLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
+                <span>{isLoading ? 'Signing in with Google...' : 'Continue with Google'}</span>
               </button>
 
               <div className="relative flex py-1 items-center">
@@ -246,7 +270,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
           </div>
         )}
 
-        {/* 2. SCREEN: DISCORD-STYLE CHOSEN USERNAME ONBOARDING */}
+        {/* 2. SCREEN: FIRST TIME USERNAME SETUP */}
         {step === 'set_username' && googleUser && (
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-pulse-border pb-3">
@@ -258,7 +282,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                 <ArrowLeft className="w-4 h-4" />
               </button>
               <span className="text-xs font-mono uppercase text-pulse-accent font-bold">
-                Set Chat Handle
+                Choose Your Permanent Handle
               </span>
               <div className="w-4" />
             </div>
@@ -280,14 +304,14 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
               </div>
             </div>
 
-            {/* Choose Unique Username */}
+            {/* Choose Permanent Unique Username */}
             <form onSubmit={handleFinalSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-mono text-white font-bold mb-1">
-                  Choose Your Unique Chat Handle <span className="text-pulse-accent">*</span>
+                  Permanent Chat Username <span className="text-pulse-accent">*</span>
                 </label>
                 <p className="text-[11px] text-pulse-muted mb-2">
-                  This unique username will represent you on the C++ POSIX socket server (e.g. <span className="text-pulse-accent font-mono font-bold">spaceman</span>).
+                  Choose your permanent username. You will keep this username across all future sign-ins.
                 </p>
                 <div className="relative">
                   <span className="absolute left-3 top-2.5 text-pulse-accent font-mono font-bold text-sm">
@@ -318,7 +342,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                 disabled={!chosenUsername.trim()}
                 className="w-full bg-pulse-accent hover:bg-pulse-accent/90 disabled:opacity-40 disabled:cursor-not-allowed text-black font-bold text-sm py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-[0_0_15px_rgba(0,240,255,0.25)] cursor-pointer"
               >
-                <span>Enter PulseChat as @{chosenUsername.trim() || 'username'}</span>
+                <span>Save & Enter PulseChat as @{chosenUsername.trim() || 'username'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>

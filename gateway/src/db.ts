@@ -97,6 +97,16 @@ export class PulseDatabase {
   }
 
   // --- USER OPERATIONS ---
+  public findUserByEmail(email: string): DbUser | undefined {
+    const target = email.trim().toLowerCase();
+    for (const user of Object.values(this.data.users)) {
+      if (user.email && user.email.trim().toLowerCase() === target) {
+        return user;
+      }
+    }
+    return undefined;
+  }
+
   public validateAndRegisterUser(
     username: string,
     email: string | undefined,
@@ -104,6 +114,18 @@ export class PulseDatabase {
     avatarUrl: string,
     provider: 'google' | 'local'
   ): { success: boolean; error?: string; user?: DbUser } {
+    // If email is provided, check if user already exists with this email
+    if (email) {
+      const existingByEmail = this.findUserByEmail(email);
+      if (existingByEmail) {
+        existingByEmail.displayName = displayName || existingByEmail.displayName;
+        existingByEmail.avatarUrl = avatarUrl || existingByEmail.avatarUrl;
+        existingByEmail.lastActive = Date.now();
+        this.save();
+        return { success: true, user: existingByEmail };
+      }
+    }
+
     const handle = username.trim().toLowerCase();
     if (!handle) {
       return { success: false, error: 'Username cannot be empty.' };
@@ -121,6 +143,7 @@ export class PulseDatabase {
       // Update existing user profile
       existing.displayName = displayName || existing.displayName;
       existing.avatarUrl = avatarUrl || existing.avatarUrl;
+      if (email && !existing.email) existing.email = email;
       existing.lastActive = Date.now();
       this.save();
       return { success: true, user: existing };
@@ -176,7 +199,7 @@ export class PulseDatabase {
     const newRoom: DbRoom = {
       name,
       isProtected,
-      password: isProtected ? password?.trim() : undefined,
+      password: isProtected ? password!.trim() : undefined,
       createdBy,
       createdAt: Date.now()
     };
@@ -186,23 +209,23 @@ export class PulseDatabase {
     return { success: true, room: newRoom };
   }
 
-  public getRoom(roomName: string): DbRoom | undefined {
-    return this.data.rooms[roomName.toLowerCase()];
-  }
-
   public getAllRooms(): DbRoom[] {
     return Object.values(this.data.rooms);
   }
 
+  public getRoom(roomName: string): DbRoom | undefined {
+    return this.data.rooms[roomName.toLowerCase()];
+  }
+
   // --- MESSAGE HISTORY OPERATIONS ---
-  public addMessage(
+  public saveMessage(
     room: string,
     sender: string,
     text: string,
     displayName?: string,
     avatarUrl?: string
   ): DbMessage {
-    const msg: DbMessage = {
+    const newMsg: DbMessage = {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       room: room.toLowerCase(),
       sender,
@@ -213,23 +236,20 @@ export class PulseDatabase {
       createdAt: Date.now()
     };
 
-    this.data.messages.push(msg);
+    this.data.messages.push(newMsg);
 
-    // Keep database size bounded (last 5,000 messages)
+    // Keep up to 5,000 recent messages in DB
     if (this.data.messages.length > 5000) {
       this.data.messages = this.data.messages.slice(-5000);
     }
 
     this.save();
-    return msg;
+    return newMsg;
   }
 
   public getRoomHistory(roomName: string, limit = 50): DbMessage[] {
     const target = roomName.toLowerCase();
-    return this.data.messages
-      .filter((m) => m.room === target)
-      .slice(-limit);
+    const matches = this.data.messages.filter((m) => m.room.toLowerCase() === target);
+    return matches.slice(-limit);
   }
 }
-
-export const db = new PulseDatabase();
