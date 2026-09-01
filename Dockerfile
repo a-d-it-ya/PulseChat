@@ -2,7 +2,7 @@
 # Stage 1: Build C++ epoll Reactor Server
 # ==============================================================================
 FROM alpine:3.19 AS cpp-builder
-RUN apk add --no-cache build-base cmake
+RUN apk add --no-cache build-base cmake linux-headers
 
 WORKDIR /build
 COPY CMakeLists.txt ./
@@ -29,8 +29,8 @@ RUN npm run build
 # ==============================================================================
 FROM node:20-alpine AS runtime
 
-# Install runtime libraries for C++ binary
-RUN apk add --no-cache libstdc++
+# Install runtime dependencies for compiled C++ binary
+RUN apk add --no-cache libstdc++ libgcc musl
 
 WORKDIR /app
 
