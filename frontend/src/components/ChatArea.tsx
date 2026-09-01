@@ -35,7 +35,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   // Filter messages strictly relevant to the currently viewed room or active DM
   const filteredMessages = messages.filter((msg) => {
-    // 1. Direct Message Mode (Strict 1-on-1 private filter)
+    // 1. Direct Message Mode (Strict 1-on-1 private filter like Discord)
     if (activeDmUser) {
       if (!msg.isPrivate) return false;
       const dmTarget = activeDmUser.toLowerCase();
@@ -43,12 +43,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       const sender = msg.sender.toLowerCase();
       const target = msg.targetUser?.toLowerCase();
 
-      return (
-        sender === dmTarget ||
-        target === dmTarget ||
-        (sender === 'you' && target === dmTarget) ||
-        (sender === myName && target === dmTarget)
-      );
+      const isFromMeToThem = (sender === myName || sender === 'you') && target === dmTarget;
+      const isFromThemToMe = sender === dmTarget && (target === myName || target === undefined || target === 'you');
+
+      return isFromMeToThem || isFromThemToMe;
     }
 
     // 2. Ignore error messages in chat feed (they appear in popup toast)

@@ -5,8 +5,6 @@ import { ToastData } from '../components/Toast';
 
 const STORAGE_KEY_PROFILE = 'pulsechat_user_profile';
 const STORAGE_KEY_ROOM = 'pulsechat_current_room';
-const STORAGE_KEY_MESSAGES = 'pulsechat_messages_history';
-const STORAGE_KEY_WS_URL = 'pulsechat_ws_url_override';
 
 export function getInitialWsUrl() {
   if (typeof window !== 'undefined') {
@@ -46,11 +44,14 @@ export function usePulseChat() {
   });
   const [activeDmUser, setActiveDmUser] = useState<string | null>(null);
 
-  // Messages list
+  // Messages list (isolated per user handle)
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_MESSAGES);
-      return saved ? JSON.parse(saved) : [];
+      if (profile?.username) {
+        const saved = localStorage.getItem(`pulsechat_msgs_${profile.username.toLowerCase()}`);
+        return saved ? JSON.parse(saved) : [];
+      }
+      return [];
     } catch {
       return [];
     }
@@ -77,12 +78,14 @@ export function usePulseChat() {
   const wsUrlRef = useRef(wsUrl);
   wsUrlRef.current = wsUrl;
 
-  // Persist messages whenever updated (keep up to last 300 messages)
+  // Persist messages per username so accounts never leak DMs to other users on same device
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(messages.slice(-300)));
-    } catch {}
-  }, [messages]);
+    if (profile?.username) {
+      try {
+        localStorage.setItem(`pulsechat_msgs_${profile.username.toLowerCase()}`, JSON.stringify(messages.slice(-300)));
+      } catch {}
+    }
+  }, [messages, profile?.username]);
 
   // Persist profile
   useEffect(() => {
@@ -146,7 +149,6 @@ export function usePulseChat() {
   // Set and save custom WebSocket URL
   const updateWsUrl = useCallback((newUrl: string) => {
     const formatted = newUrl.trim().replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
-    localStorage.setItem(STORAGE_KEY_WS_URL, formatted);
     setWsUrlState(formatted);
     wsUrlRef.current = formatted;
     if (wsRef.current) {
@@ -269,6 +271,9 @@ export function usePulseChat() {
               if (payload.includes('Welcome to PulseChat')) {
                 setIsRegistered(true);
                 setRegistrationError(null);
+                if (profileRef.current?.email && profileRef.current?.username) {
+                  localStorage.setItem(`pulsechat_handle_for_${profileRef.current.email}`, profileRef.current.username);
+                }
               }
 
               let notificationRoom: string | undefined = undefined;
@@ -348,6 +353,7 @@ export function usePulseChat() {
               let text = payload;
               if (dmMatch) {
                 sender = dmMatch[1];
+                targetUser = profileRef.current?.username || 'You';
                 text = dmMatch[2];
               } else if (toMatch) {
                 targetUser = toMatch[1];
@@ -368,9 +374,18 @@ export function usePulseChat() {
             }
 
             case MessageType.ERROR_RESPONSE: {
-              if (!profileRef.current) {
+              if (
+                frame.payload.includes('already taken') ||
+                frame.payload.includes('registration failed') ||
+                frame.payload.includes('Must register')
+              ) {
                 setRegistrationError(frame.payload);
+                setIsRegistered(false);
+                if (profileRef.current?.email) {
+                  localStorage.removeItem(`pulsechat_handle_for_${profileRef.current.email}`);
+                }
               }
+
               if (
                 frame.payload.includes('protected room') ||
                 frame.payload.includes('Password') ||
@@ -378,6 +393,7 @@ export function usePulseChat() {
               ) {
                 setCurrentRoom('general');
               }
+
               // Show as Popup Toast Alert that auto-disappears!
               setToast({
                 text: frame.payload,
@@ -442,8 +458,20 @@ export function usePulseChat() {
   // Register / login
   const login = useCallback((userProfile: UserProfile) => {
     setProfile(userProfile);
-    setIsRegistered(true);
     setRegistrationError(null);
+
+    // Load message history for this specific user
+    try {
+      const saved = localStorage.getItem(`pulsechat_msgs_${userProfile.username.toLowerCase()}`);
+      if (saved) {
+        setMessages(JSON.parse(saved));
+      } else {
+        setMessages([]);
+      }
+    } catch {
+      setMessages([]);
+    }
+
     sendAction('register', {
       username: userProfile.username,
       displayName: userProfile.displayName,
@@ -474,6 +502,8 @@ export function usePulseChat() {
   const logout = useCallback(() => {
     setProfile(null);
     setIsRegistered(false);
+    setActiveDmUser(null);
+    setMessages([]);
     localStorage.removeItem(STORAGE_KEY_PROFILE);
     if (wsRef.current) {
       try {

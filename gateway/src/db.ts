@@ -133,20 +133,20 @@ export class PulseDatabase {
 
     const existing = this.data.users[handle];
     if (existing) {
-      // If claimed by another email in Google provider
-      if (email && existing.email && existing.email.toLowerCase() !== email.toLowerCase()) {
-        return {
-          success: false,
-          error: `Username '@${handle}' is already registered by another account. Please choose a different unique handle.`
-        };
+      // If email is provided and matches existing registered user's email, allow relogin
+      if (email && existing.email && existing.email.trim().toLowerCase() === email.trim().toLowerCase()) {
+        existing.displayName = displayName || existing.displayName;
+        existing.avatarUrl = avatarUrl || existing.avatarUrl;
+        existing.lastActive = Date.now();
+        this.save();
+        return { success: true, user: existing };
       }
-      // Update existing user profile
-      existing.displayName = displayName || existing.displayName;
-      existing.avatarUrl = avatarUrl || existing.avatarUrl;
-      if (email && !existing.email) existing.email = email;
-      existing.lastActive = Date.now();
-      this.save();
-      return { success: true, user: existing };
+
+      // Otherwise, username is taken! Stop user and ask to choose a different handle.
+      return {
+        success: false,
+        error: `Username '@${handle}' is already taken. Please choose a different username.`
+      };
     }
 
     // Register new unique user

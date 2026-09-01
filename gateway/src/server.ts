@@ -249,7 +249,14 @@ wss.on('connection', (ws: WebSocket, req) => {
         }));
       }
 
-      // Broadcast raw PCAP telemetry to all clients
+      // Broadcast raw PCAP telemetry to all clients (Sanitize private DMs!)
+      const isPrivate = frame.type === MessageType.PRIVATE_MESSAGE;
+      const telemetryPayload = isPrivate
+        ? '[🔒 Encrypted Direct Message]'
+        : frame.payload.length > 80
+        ? frame.payload.substring(0, 80) + '...'
+        : frame.payload;
+
       broadcastToAll({
         event: 'telemetry_event',
         eventData: {
@@ -257,8 +264,8 @@ wss.on('connection', (ws: WebSocket, req) => {
           type: frame.type,
           typeName: frame.typeName,
           length: frame.length,
-          payload: frame.payload.length > 80 ? frame.payload.substring(0, 80) + '...' : frame.payload,
-          rawHex: frame.rawHex,
+          payload: telemetryPayload,
+          rawHex: isPrivate ? '2a 2a 2a 2a 2a' : frame.rawHex,
           timestamp: frame.timestamp
         }
       });

@@ -127,15 +127,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  // Find users with active DM history
+  // Find users with active DM history strictly involving this user
   const dmUsersSet = new Set<string>();
+  const myUsername = profile?.username?.toLowerCase();
   for (const m of messages) {
-    if (m.isPrivate) {
-      if (m.sender && m.sender !== 'SYSTEM' && m.sender !== 'You' && m.sender !== profile?.username) {
-        dmUsersSet.add(m.sender.toLowerCase());
-      }
-      if (m.targetUser && m.targetUser !== profile?.username) {
-        dmUsersSet.add(m.targetUser.toLowerCase());
+    if (m.isPrivate && myUsername) {
+      const sender = m.sender?.toLowerCase();
+      const target = m.targetUser?.toLowerCase();
+
+      if (sender === myUsername && target && target !== myUsername) {
+        dmUsersSet.add(target);
+      } else if (target === myUsername && sender && sender !== myUsername && sender !== 'system') {
+        dmUsersSet.add(sender);
+      } else if (sender === 'you' && target && target !== myUsername) {
+        dmUsersSet.add(target);
       }
     }
   }
