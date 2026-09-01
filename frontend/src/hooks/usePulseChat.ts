@@ -23,6 +23,8 @@ export function getInitialWsUrl() {
   return 'ws://127.0.0.1:3001';
 }
 
+const STORAGE_KEY_ACTIVE_DM = 'pulsechat_active_dm';
+
 export function usePulseChat() {
   const [wsUrl, setWsUrlState] = useState<string>(getInitialWsUrl);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('connecting');
@@ -42,7 +44,18 @@ export function usePulseChat() {
   const [currentRoom, setCurrentRoom] = useState<string>(() => {
     return localStorage.getItem(STORAGE_KEY_ROOM) || 'general';
   });
-  const [activeDmUser, setActiveDmUser] = useState<string | null>(null);
+  const [activeDmUser, setActiveDmUserState] = useState<string | null>(() => {
+    return localStorage.getItem(STORAGE_KEY_ACTIVE_DM) || null;
+  });
+
+  const setActiveDmUser = useCallback((user: string | null) => {
+    setActiveDmUserState(user);
+    if (user) {
+      localStorage.setItem(STORAGE_KEY_ACTIVE_DM, user);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_ACTIVE_DM);
+    }
+  }, []);
 
   // Messages list (isolated per user handle)
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -344,32 +357,23 @@ export function usePulseChat() {
 
             case MessageType.PRIVATE_MESSAGE: {
               const payload = frame.payload;
-              let sender = 'Direct Message';
-              let targetUser: string | undefined = undefined;
-
               const dmMatch = payload.match(/^\[DM from ([\w-]+)\]:\s*(.*)$/);
-              const toMatch = payload.match(/^\[DM to ([\w-]+)\]:\s*(.*)$/);
 
-              let text = payload;
               if (dmMatch) {
-                sender = dmMatch[1];
-                targetUser = profileRef.current?.username || 'You';
-                text = dmMatch[2];
-              } else if (toMatch) {
-                targetUser = toMatch[1];
-                sender = profileRef.current?.username || 'You';
-                text = toMatch[2];
-              }
+                const sender = dmMatch[1];
+                const targetUser = profileRef.current?.username || 'You';
+                const text = dmMatch[2];
 
-              appendMessage({
-                type: frame.type,
-                sender,
-                targetUser,
-                text,
-                timestamp: timeStr,
-                isPrivate: true,
-                rawHex: frame.rawHex
-              });
+                appendMessage({
+                  type: frame.type,
+                  sender,
+                  targetUser,
+                  text,
+                  timestamp: timeStr,
+                  isPrivate: true,
+                  rawHex: frame.rawHex
+                });
+              }
               break;
             }
 

@@ -109,8 +109,32 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     }
   }, []);
 
-  // 2. Parent Window Listener: Listen for postMessage from Google OAuth popup
+  // Parent Window Listener: Listen via BroadcastChannel, StorageEvent, and postMessage
   useEffect(() => {
+    // 1. BroadcastChannel (Works seamlessly across all tabs/popups regardless of COOP)
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('pulsechat_oauth_channel');
+      channel.onmessage = (event) => {
+        if (event.data?.accessToken) {
+          fetchGoogleUserInfo(event.data.accessToken);
+        }
+      };
+    } catch {}
+
+    // 2. Storage event fallback
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'pulsechat_oauth_handoff' && event.newValue) {
+        try {
+          const parsed = JSON.parse(event.newValue);
+          if (parsed.accessToken) {
+            fetchGoogleUserInfo(parsed.accessToken);
+          }
+        } catch {}
+      }
+    };
+
+    // 3. postMessage fallback
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type === 'PULSECHAT_GOOGLE_AUTH_SUCCESS' && event.data.accessToken) {
@@ -118,8 +142,14 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
       }
     };
 
+    window.addEventListener('storage', handleStorage);
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+
+    return () => {
+      if (channel) channel.close();
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('message', handleMessage);
+    };
   }, []);
 
   // Launch Google OAuth2 Popup

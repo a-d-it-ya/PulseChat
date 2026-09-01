@@ -93,6 +93,13 @@ export const Header: React.FC<HeaderProps> = ({
                 {profile.email || `@${profile.username}`}
               </div>
             </div>
+            <button
+              onClick={onLogout}
+              className="p-1.5 rounded-lg hover:bg-pulse-red/10 text-pulse-muted hover:text-pulse-red transition-colors ml-1"
+              title="Log Out & Switch Account"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
 

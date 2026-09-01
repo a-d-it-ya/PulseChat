@@ -114,48 +114,68 @@ export class PulseDatabase {
     avatarUrl: string,
     provider: 'google' | 'local'
   ): { success: boolean; error?: string; user?: DbUser } {
-    // If email is provided, check if user already exists with this email
-    if (email) {
-      const existingByEmail = this.findUserByEmail(email);
-      if (existingByEmail) {
-        existingByEmail.displayName = displayName || existingByEmail.displayName;
-        existingByEmail.avatarUrl = avatarUrl || existingByEmail.avatarUrl;
-        existingByEmail.lastActive = Date.now();
-        this.save();
-        return { success: true, user: existingByEmail };
-      }
-    }
-
     const handle = username.trim().toLowerCase();
     if (!handle) {
       return { success: false, error: 'Username cannot be empty.' };
     }
 
-    const existing = this.data.users[handle];
-    if (existing) {
-      // If email is provided and matches existing registered user's email, allow relogin
-      if (email && existing.email && existing.email.trim().toLowerCase() === email.trim().toLowerCase()) {
-        existing.displayName = displayName || existing.displayName;
-        existing.avatarUrl = avatarUrl || existing.avatarUrl;
-        existing.lastActive = Date.now();
+    const cleanEmail = email ? email.trim().toLowerCase() : undefined;
+    const existingUser = this.data.users[handle];
+
+    if (cleanEmail) {
+      const existingByEmail = this.findUserByEmail(cleanEmail);
+
+      // Case A: User is already registered under this exact handle with this email -> Successful Relogin
+      if (existingUser && existingUser.email && existingUser.email.toLowerCase() === cleanEmail) {
+        existingUser.displayName = displayName || existingUser.displayName;
+        existingUser.avatarUrl = avatarUrl || existingUser.avatarUrl;
+        existingUser.lastActive = Date.now();
         this.save();
-        return { success: true, user: existing };
+        return { success: true, user: existingUser };
       }
 
-      // Otherwise, username is taken! Stop user and ask to choose a different handle.
+      // Case B: User wants to claim or change to an available username `handle`
+      if (!existingUser) {
+        // If they had a previous username under this email, remove old handle so it's freed
+        if (existingByEmail && existingByEmail.username !== handle) {
+          delete this.data.users[existingByEmail.username];
+        }
+
+        const newUser: DbUser = {
+          username: handle,
+          email: cleanEmail,
+          displayName: displayName || handle,
+          avatarUrl: avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${handle}`,
+          provider,
+          createdAt: existingByEmail ? existingByEmail.createdAt : Date.now(),
+          lastActive: Date.now()
+        };
+
+        this.data.users[handle] = newUser;
+        this.save();
+        return { success: true, user: newUser };
+      }
+
+      // Case C: Username is already taken by another account / email
       return {
         success: false,
         error: `Username '@${handle}' is already taken. Please choose a different username.`
       };
     }
 
-    // Register new unique user
+    // Local / Guest user without email:
+    if (existingUser) {
+      return {
+        success: false,
+        error: `Username '@${handle}' is already taken. Please choose a different username.`
+      };
+    }
+
     const newUser: DbUser = {
       username: handle,
-      email,
       displayName: displayName || handle,
       avatarUrl: avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${handle}`,
-      provider,
+      provider: 'local',
       createdAt: Date.now(),
       lastActive: Date.now()
     };
