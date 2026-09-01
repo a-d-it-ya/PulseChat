@@ -156,6 +156,12 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     }, 1000);
   };
 
+  // Submit Final Profile for First Time User
+  const handleFinalSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const handle = chosenUsername.trim().toLowerCase();
+    if (!handle || !googleUser) return;
+
     // Submit to server for uniqueness verification
     onLogin({
       username: handle,
