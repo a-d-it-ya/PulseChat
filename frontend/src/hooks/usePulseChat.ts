@@ -16,9 +16,9 @@ export function getInitialWsUrl() {
     } catch {}
 
     if (window.location.protocol === 'https:') {
-      return 'wss://wise-commonly-resident-cloud.trycloudflare.com';
+      return import.meta.env.VITE_WS_URL || 'wss://api.pulsechatting.in';
     }
-    return `ws://${window.location.hostname}:3001`;
+    return import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:3001`;
   }
   return 'ws://127.0.0.1:3001';
 }
