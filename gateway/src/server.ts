@@ -215,16 +215,25 @@ wss.on('connection', (ws: WebSocket, req) => {
   }
 
   // Connect TCP socket to C++ server
-  tcpSocket.connect(TCP_PORT, TCP_HOST, () => {
-    log('TCP', `Bridged WebSocket client (${clientIp}) to C++ TCP server`);
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        event: 'tcp_status',
-        status: 'connected',
-        server: `${TCP_HOST}:${TCP_PORT}`
-      }));
+  const connectTcp = () => {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    try {
+      tcpSocket.connect(TCP_PORT, TCP_HOST, () => {
+        log('TCP', `Bridged WebSocket client (${clientIp}) to C++ TCP server`);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            event: 'tcp_status',
+            status: 'connected',
+            server: `${TCP_HOST}:${TCP_PORT}`
+          }));
+        }
+      });
+    } catch (e: any) {
+      log('TCP_ERR', `Failed to connect to C++ server: ${e.message}`);
     }
-  });
+  };
+
+  connectTcp();
 
   // Handle incoming data from C++ TCP Server
   tcpSocket.on('data', (chunk: Buffer) => {
@@ -261,7 +270,7 @@ wss.on('connection', (ws: WebSocket, req) => {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
         event: 'tcp_status',
-        status: 'error',
+        status: 'disconnected',
         details: err.message
       }));
     }
