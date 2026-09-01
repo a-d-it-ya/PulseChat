@@ -30,44 +30,76 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [authError, setAuthError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Check if page was returned from a Google OAuth redirect with #access_token=...
+  const fetchGoogleUserInfo = async (accessToken: string) => {
+    setIsLoading(true);
+    try {
+      const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      if (data.email) {
+        setGoogleUser({
+          email: data.email,
+          name: data.name || data.email.split('@')[0],
+          avatarUrl: data.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${data.email}`
+        });
+        const suggested = data.email
+          .split('@')[0]
+          .replace(/[^a-zA-Z0-9_-]/g, '_')
+          .toLowerCase();
+        setChosenUsername(suggested);
+        setStep('set_username');
+      } else {
+        setAuthError('Could not retrieve email from Google account.');
+      }
+    } catch (err) {
+      console.error('Userinfo error:', err);
+      setAuthError('Failed to fetch user profile from Google.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 1. Popup Handshake: If running inside popup window, send token to parent and close immediately!
   useEffect(() => {
     const hash = window.location.hash;
     if (hash && hash.includes('access_token=')) {
       const params = new URLSearchParams(hash.replace('#', '?'));
       const accessToken = params.get('access_token');
       if (accessToken) {
-        setIsLoading(true);
+        if (window.opener && window.opener !== window) {
+          try {
+            window.opener.postMessage(
+              { type: 'PULSECHAT_GOOGLE_AUTH_SUCCESS', accessToken },
+              window.location.origin
+            );
+            window.close();
+            return;
+          } catch (e) {
+            console.error('Failed to postMessage to opener:', e);
+          }
+        }
+        // Fallback if not popup: handle in same tab
         window.history.replaceState(null, '', window.location.pathname);
-        fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: { Authorization: `Bearer ${accessToken}` }
-        })
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.email) {
-              setGoogleUser({
-                email: data.email,
-                name: data.name || data.email.split('@')[0],
-                avatarUrl: data.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${data.email}`
-              });
-              const suggested = data.email
-                .split('@')[0]
-                .replace(/[^a-zA-Z0-9_-]/g, '_')
-                .toLowerCase();
-              setChosenUsername(suggested);
-              setStep('set_username');
-            }
-          })
-          .catch((err) => {
-            console.error('Userinfo error:', err);
-            setAuthError('Failed to fetch user profile from Google.');
-          })
-          .finally(() => setIsLoading(false));
+        fetchGoogleUserInfo(accessToken);
       }
     }
   }, []);
 
-  // Robust Direct Google OAuth Flow
+  // 2. Parent Window Listener: Listen for postMessage from Google OAuth popup
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === 'PULSECHAT_GOOGLE_AUTH_SUCCESS' && event.data.accessToken) {
+        fetchGoogleUserInfo(event.data.accessToken);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // Launch Google OAuth2 Popup
   const handleGoogleOAuthLogin = () => {
     setAuthError(null);
     setIsLoading(true);
@@ -89,56 +121,18 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     );
 
     if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+      // If popup blocked, redirect directly
       window.location.href = authUrl;
       return;
     }
 
-    const pollTimer = window.setInterval(() => {
-      try {
-        if (!popup || popup.closed) {
-          window.clearInterval(pollTimer);
-          setIsLoading(false);
-          return;
-        }
-
-        const popupUrl = popup.location.href;
-        if (popupUrl && popupUrl.includes(redirectUri) && popupUrl.includes('access_token=')) {
-          window.clearInterval(pollTimer);
-          const hash = popup.location.hash;
-          popup.close();
-
-          const params = new URLSearchParams(hash.replace('#', '?'));
-          const accessToken = params.get('access_token');
-          if (accessToken) {
-            fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-              headers: { Authorization: `Bearer ${accessToken}` }
-            })
-              .then((res) => res.json())
-              .then((data) => {
-                if (data.email) {
-                  setGoogleUser({
-                    email: data.email,
-                    name: data.name || data.email.split('@')[0],
-                    avatarUrl: data.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${data.email}`
-                  });
-                  const suggested = data.email
-                    .split('@')[0]
-                    .replace(/[^a-zA-Z0-9_-]/g, '_')
-                    .toLowerCase();
-                  setChosenUsername(suggested);
-                  setStep('set_username');
-                }
-              })
-              .catch(() => {
-                setAuthError('Failed to fetch user profile from Google.');
-              })
-              .finally(() => setIsLoading(false));
-          }
-        }
-      } catch (e) {
-        // Cross-origin access error is normal while popup is on accounts.google.com
+    // Monitor popup close without login
+    const checkTimer = window.setInterval(() => {
+      if (!popup || popup.closed) {
+        window.clearInterval(checkTimer);
+        setIsLoading(false);
       }
-    }, 500);
+    }, 1000);
   };
 
   // Submit Final Profile
