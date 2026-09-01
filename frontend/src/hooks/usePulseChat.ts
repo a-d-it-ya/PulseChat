@@ -261,6 +261,29 @@ export function usePulseChat() {
           });
         }
 
+        // 4.1. Historical & Offline Direct Messages Replay
+        if (data.event === 'dm_history' && Array.isArray(data.messages)) {
+          const myUser = profileRef.current?.username?.toLowerCase();
+          const loadedDms: ChatMessage[] = data.messages.map((m: any) => ({
+            id: m.id,
+            type: MessageType.PRIVATE_MESSAGE,
+            sender: m.sender,
+            targetUser: m.targetUser,
+            displayName: m.displayName,
+            avatarUrl: m.avatarUrl,
+            text: m.text,
+            timestamp: m.timestamp,
+            isPrivate: true,
+            isMentioned: Boolean(myUser && m.targetUser?.toLowerCase() === myUser)
+          }));
+
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((p) => p.id));
+            const newDms = loadedDms.filter((l) => !existingIds.has(l.id));
+            return [...prev, ...newDms];
+          });
+        }
+
         // 5. Live Telemetry Event
         if (data.event === 'telemetry_event' && data.eventData) {
           setTelemetryEvents((prev) => [data.eventData, ...prev.slice(0, 79)]);

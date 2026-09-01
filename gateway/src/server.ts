@@ -346,7 +346,6 @@ wss.on('connection', (ws: WebSocket, req) => {
           broadcastPresence();
 
           frameBuffer = encodeFrame(MessageType.USER_REGISTER, u.username);
-
           // Send initial #general history upon registration
           const history = db.getRoomHistory(session.currentRoom || 'general', 50);
           ws.send(JSON.stringify({
@@ -354,6 +353,15 @@ wss.on('connection', (ws: WebSocket, req) => {
             room: session.currentRoom || 'general',
             messages: history
           }));
+
+          // Send stored offline & historical DMs for this user
+          const userDms = db.getDirectMessagesForUser(u.username, 200);
+          if (userDms.length > 0) {
+            ws.send(JSON.stringify({
+              event: 'dm_history',
+              messages: userDms
+            }));
+          }
           break;
         }
 
@@ -381,8 +389,8 @@ wss.on('connection', (ws: WebSocket, req) => {
               session.displayName,
               session.avatarUrl
             );
+            frameBuffer = encodeFrame(MessageType.CHAT_MESSAGE, msg.text);
           }
-          frameBuffer = encodeFrame(MessageType.CHAT_MESSAGE, msg.text);
           break;
         }
 
@@ -443,9 +451,42 @@ wss.on('connection', (ws: WebSocket, req) => {
           break;
         }
 
-        case 'private_message':
-          frameBuffer = encodeFrame(MessageType.PRIVATE_MESSAGE, `${msg.target}:${msg.text}`);
+        case 'private_message': {
+          const target = (msg.target || '').trim().toLowerCase();
+          const text = (msg.text || '').trim();
+          if (session.username && target && text) {
+            // 1. Permanently store DM in database so it survives offline recipient
+            const savedMsg = db.saveDirectMessage(
+              session.username,
+              target,
+              text,
+              session.displayName,
+              session.avatarUrl
+            );
+
+            // 2. Deliver in real-time to recipient if they are currently online
+            for (const [otherWs, otherSession] of activeSessions.entries()) {
+              if (otherSession.username && otherSession.username.toLowerCase() === target) {
+                if (otherWs.readyState === WebSocket.OPEN) {
+                  otherWs.send(JSON.stringify({
+                    event: 'pcap_frame',
+                    frame: {
+                      type: MessageType.PRIVATE_MESSAGE,
+                      typeName: 'PRIVATE_MESSAGE',
+                      length: text.length,
+                      payload: `[DM from ${session.username}]: ${text}`,
+                      timestamp: savedMsg.timestamp
+                    }
+                  }));
+                }
+              }
+            }
+
+            // 3. Send to C++ reactor for metrics / socket telemetry
+            frameBuffer = encodeFrame(MessageType.PRIVATE_MESSAGE, `${target}:${text}`);
+          }
           break;
+        }
 
         case 'list_rooms':
           frameBuffer = encodeFrame(MessageType.LIST_ROOMS, '');

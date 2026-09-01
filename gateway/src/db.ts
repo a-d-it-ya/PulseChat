@@ -21,8 +21,10 @@ export interface DbRoom {
 
 export interface DbMessage {
   id: string;
-  room: string;
+  room?: string;
   sender: string;
+  targetUser?: string;
+  isPrivate?: boolean;
   displayName?: string;
   avatarUrl?: string;
   text: string;
@@ -283,9 +285,47 @@ export class PulseDatabase {
     return this.saveMessage(room, sender, text, displayName, avatarUrl);
   }
 
+  public saveDirectMessage(
+    sender: string,
+    targetUser: string,
+    text: string,
+    displayName?: string,
+    avatarUrl?: string
+  ): DbMessage {
+    const newMsg: DbMessage = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      sender: sender.toLowerCase(),
+      targetUser: targetUser.toLowerCase(),
+      isPrivate: true,
+      displayName,
+      avatarUrl,
+      text,
+      timestamp: new Date().toLocaleTimeString(),
+      createdAt: Date.now()
+    };
+
+    this.data.messages.push(newMsg);
+
+    // Keep up to 10,000 recent messages in DB
+    if (this.data.messages.length > 10000) {
+      this.data.messages = this.data.messages.slice(-10000);
+    }
+
+    this.save();
+    return newMsg;
+  }
+
+  public getDirectMessagesForUser(username: string, limit = 200): DbMessage[] {
+    const user = username.toLowerCase();
+    const matches = this.data.messages.filter(
+      (m) => m.isPrivate && (m.sender === user || m.targetUser === user)
+    );
+    return matches.slice(-limit);
+  }
+
   public getRoomHistory(roomName: string, limit = 50): DbMessage[] {
     const target = roomName.toLowerCase();
-    const matches = this.data.messages.filter((m) => m.room.toLowerCase() === target);
+    const matches = this.data.messages.filter((m) => !m.isPrivate && m.room?.toLowerCase() === target);
     return matches.slice(-limit);
   }
 }
