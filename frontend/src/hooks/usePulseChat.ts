@@ -3,13 +3,26 @@ import { MessageType, ChatMessage, RoomItem, UserItem, SystemMetrics, TelemetryE
 import { notificationAudio } from '../utils/audio';
 import { ToastData } from '../components/Toast';
 
-const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:3001`;
-
 const STORAGE_KEY_PROFILE = 'pulsechat_user_profile';
 const STORAGE_KEY_ROOM = 'pulsechat_current_room';
 const STORAGE_KEY_MESSAGES = 'pulsechat_messages_history';
+const STORAGE_KEY_WS_URL = 'pulsechat_ws_url_override';
+
+export function getInitialWsUrl() {
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+  const override = localStorage.getItem(STORAGE_KEY_WS_URL);
+  if (override && override.trim()) return override.trim();
+  if (typeof window !== 'undefined') {
+    if (window.location.protocol === 'https:') {
+      return 'wss://wise-commonly-resident-cloud.trycloudflare.com';
+    }
+    return `ws://${window.location.hostname}:3001`;
+  }
+  return 'ws://127.0.0.1:3001';
+}
 
 export function usePulseChat() {
+  const [wsUrl, setWsUrlState] = useState<string>(getInitialWsUrl);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('connecting');
   const [tcpStatus, setTcpStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
 
@@ -56,6 +69,9 @@ export function usePulseChat() {
 
   const currentRoomRef = useRef(currentRoom);
   currentRoomRef.current = currentRoom;
+
+  const wsUrlRef = useRef(wsUrl);
+  wsUrlRef.current = wsUrl;
 
   // Persist messages whenever updated (keep up to last 300 messages)
   useEffect(() => {
@@ -123,6 +139,19 @@ export function usePulseChat() {
     }
   }, []);
 
+  // Set and save custom WebSocket URL
+  const updateWsUrl = useCallback((newUrl: string) => {
+    const formatted = newUrl.trim().replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
+    localStorage.setItem(STORAGE_KEY_WS_URL, formatted);
+    setWsUrlState(formatted);
+    wsUrlRef.current = formatted;
+    if (wsRef.current) {
+      try {
+        wsRef.current.close();
+      } catch {}
+    }
+  }, []);
+
   // Connect to Gateway WebSocket
   const connect = useCallback(() => {
     if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
@@ -130,7 +159,16 @@ export function usePulseChat() {
     }
 
     setWsStatus('connecting');
-    const ws = new WebSocket(WS_URL);
+    const targetUrl = wsUrlRef.current;
+    
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(targetUrl);
+    } catch (e) {
+      console.error('Invalid WebSocket URL:', targetUrl, e);
+      setWsStatus('error');
+      return;
+    }
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -381,7 +419,7 @@ export function usePulseChat() {
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
     };
-  }, [connect]);
+  }, [connect, wsUrl]);
 
   // Periodic heartbeat & room refresher
   useEffect(() => {
@@ -523,6 +561,8 @@ export function usePulseChat() {
   }, [activeDmUser, joinRoom, leaveRoom, sendPrivateMessage, sendAction, appendMessage]);
 
   return {
+    wsUrl,
+    updateWsUrl,
     wsStatus,
     tcpStatus,
     profile,

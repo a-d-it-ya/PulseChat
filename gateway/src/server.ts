@@ -493,8 +493,8 @@ wss.on('connection', (ws: WebSocket, req) => {
 });
 
 // Start Gateway Server
-server.listen(WS_PORT, () => {
-  log('INIT', `PulseChat Gateway listening on WebSocket port ${WS_PORT}`);
+server.listen(WS_PORT, '0.0.0.0', () => {
+  log('INIT', `PulseChat Gateway listening on WebSocket port ${WS_PORT} (0.0.0.0)`);
   log('INIT', `Target C++ Reactor Server: ${TCP_HOST}:${TCP_PORT}`);
   initMetricsPoller();
 });

@@ -44,10 +44,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [customActivity, setCustomActivity] = useState(profile?.activityText || '');
   const [selectedStatus, setSelectedStatus] = useState<UserStatus>(profile?.status || 'online');
 
+  const STORAGE_UNLOCKED_ROOMS = 'pulsechat_unlocked_rooms_v1';
+
+  const getUnlockedRooms = (): Record<string, string> => {
+    try {
+      const saved = localStorage.getItem(STORAGE_UNLOCKED_ROOMS);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const saveUnlockedRoom = (roomName: string, password?: string) => {
+    if (!password || !password.trim()) return;
+    try {
+      const current = getUnlockedRooms();
+      current[roomName.toLowerCase()] = password.trim();
+      localStorage.setItem(STORAGE_UNLOCKED_ROOMS, JSON.stringify(current));
+    } catch {}
+  };
+
   const handleCreateRoom = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = newRoomName.trim();
     if (trimmed) {
+      if (isProtectedRoom && newRoomPassword.trim()) {
+        saveUnlockedRoom(trimmed, newRoomPassword.trim());
+      }
       onJoinRoom(trimmed, isProtectedRoom ? newRoomPassword.trim() : undefined);
       setNewRoomName('');
       setNewRoomPassword('');
@@ -57,7 +80,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleRoomClick = (room: RoomItem) => {
-    if (room.isProtected && room.name.toLowerCase() !== currentRoom.toLowerCase()) {
+    if (room.name.toLowerCase() === currentRoom.toLowerCase() && !activeDmUser) {
+      return;
+    }
+
+    if (room.isProtected) {
+      const unlockedMap = getUnlockedRooms();
+      const savedPassword = unlockedMap[room.name.toLowerCase()];
+      if (savedPassword) {
+        // Room was already unlocked in this browser - join immediately without prompting!
+        onSelectRoom(room.name, savedPassword);
+        onSelectDmUser(null);
+        return;
+      }
+
       setPromptTargetRoom(room.name);
       setJoinPassword('');
     } else {
@@ -68,8 +104,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (promptTargetRoom) {
-      onSelectRoom(promptTargetRoom, joinPassword);
+    if (promptTargetRoom && joinPassword.trim()) {
+      saveUnlockedRoom(promptTargetRoom, joinPassword.trim());
+      onSelectRoom(promptTargetRoom, joinPassword.trim());
       setPromptTargetRoom(null);
       setJoinPassword('');
     }

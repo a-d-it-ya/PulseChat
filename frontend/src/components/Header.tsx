@@ -1,14 +1,16 @@
 import React from 'react';
-import { Activity, Radio, Cpu, PanelRightOpen, PanelRightClose, LogOut, Mail, User } from 'lucide-react';
+import { Activity, Cpu, PanelRightOpen, PanelRightClose, Mail, ShieldCheck } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface HeaderProps {
+  wsUrl: string;
   wsStatus: 'connecting' | 'connected' | 'disconnected' | 'error';
   tcpStatus: 'connected' | 'disconnected' | 'error';
   profile: UserProfile | null;
   isRegistered: boolean;
   observabilityOpen: boolean;
   onToggleObservability: () => void;
+  onUpdateWsUrl: (url: string) => void;
   onLogout: () => void;
   uptimeSec?: number;
 }
@@ -23,6 +25,8 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   uptimeSec = 0
 }) => {
+  const isOnline = tcpStatus === 'connected' && wsStatus === 'connected';
+
   return (
     <header className="h-14 border-b border-pulse-border bg-pulse-card/80 backdrop-blur px-4 flex items-center justify-between shrink-0 select-none">
       {/* Brand & Tagline */}
@@ -47,13 +51,17 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Connection Badges & Controls */}
       <div className="flex items-center gap-3">
-        {/* TCP POSIX Status */}
+        {/* TCP POSIX Status Pill */}
         <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-pulse-surface border border-pulse-border text-xs font-mono">
           <div className="flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${tcpStatus === 'connected' ? 'bg-pulse-green animate-pulse' : 'bg-pulse-red'}`} />
+            <div
+              className={`w-2 h-2 rounded-full ${
+                isOnline ? 'bg-pulse-green animate-pulse' : 'bg-pulse-red'
+              }`}
+            />
             <span className="text-pulse-muted text-[11px]">POSIX TCP:</span>
-            <span className={tcpStatus === 'connected' ? 'text-pulse-green font-medium' : 'text-pulse-red'}>
-              {tcpStatus === 'connected' ? '127.0.0.1:9000' : 'OFFLINE'}
+            <span className={isOnline ? 'text-pulse-green font-bold' : 'text-pulse-red font-medium'}>
+              {isOnline ? '127.0.0.1:9000 (LIVE)' : 'CONNECTING...'}
             </span>
           </div>
         </div>

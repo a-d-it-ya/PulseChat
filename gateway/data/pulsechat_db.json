@@ -7,7 +7,7 @@
       "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocJZB8wlIUm1mcgeLiZwVsdma_Ijz-IrJKe-5OUKPAsCq1iJDQ=s96-c",
       "provider": "google",
       "createdAt": 1788274815913,
-      "lastActive": 1788275802538
+      "lastActive": 1788276118720
     },
     "spaceman": {
       "username": "spaceman",
@@ -16,7 +16,7 @@
       "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocLJjkjtiGr_S3LyoREbL2DRUTvaI2gL65oeilFPF_epZBIKazk=s96-c",
       "provider": "google",
       "createdAt": 1788274819351,
-      "lastActive": 1788275796052
+      "lastActive": 1788276450024
     }
   },
   "rooms": {
@@ -49,5 +49,126 @@
       "createdAt": 1788274960413
     }
   },
-  "messages": []
+  "messages": [
+    {
+      "id": "1788276091823-bsfmrsdi0",
+      "room": "fun",
+      "sender": "spaceman",
+      "displayName": "Aditya Singh",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocLJjkjtiGr_S3LyoREbL2DRUTvaI2gL65oeilFPF_epZBIKazk=s96-c",
+      "text": "@ubix u up?",
+      "timestamp": "8:51:31 pm",
+      "createdAt": 1788276091823
+    },
+    {
+      "id": "1788276105149-j08fc5syg",
+      "room": "fun",
+      "sender": "spaceman",
+      "displayName": "Aditya Singh",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocLJjkjtiGr_S3LyoREbL2DRUTvaI2gL65oeilFPF_epZBIKazk=s96-c",
+      "text": "@ubix u up?",
+      "timestamp": "8:51:45 pm",
+      "createdAt": 1788276105149
+    },
+    {
+      "id": "1788276131760-nrz7i7fyj",
+      "room": "fun",
+      "sender": "spaceman",
+      "displayName": "Aditya Singh",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocLJjkjtiGr_S3LyoREbL2DRUTvaI2gL65oeilFPF_epZBIKazk=s96-c",
+      "text": "@ubix u up?",
+      "timestamp": "8:52:11 pm",
+      "createdAt": 1788276131760
+    },
+    {
+      "id": "1788276159908-n57e10g8b",
+      "room": "general",
+      "sender": "ubix",
+      "displayName": "Aditya Singh",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocJZB8wlIUm1mcgeLiZwVsdma_Ijz-IrJKe-5OUKPAsCq1iJDQ=s96-c",
+      "text": "@spaceman what?",
+      "timestamp": "8:52:39 pm",
+      "createdAt": 1788276159908
+    },
+    {
+      "id": "1788276178461-i8wh4e5g4",
+      "room": "general",
+      "sender": "spaceman",
+      "displayName": "Aditya Singh",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocLJjkjtiGr_S3LyoREbL2DRUTvaI2gL65oeilFPF_epZBIKazk=s96-c",
+      "text": "@ub",
+      "timestamp": "8:52:58 pm",
+      "createdAt": 1788276178461
+    },
+    {
+      "id": "1788276186238-jl60hycrd",
+      "room": "general",
+      "sender": "spaceman",
+      "displayName": "Aditya Singh",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocLJjkjtiGr_S3LyoREbL2DRUTvaI2gL65oeilFPF_epZBIKazk=s96-c",
+      "text": "@ubix , you good?",
+      "timestamp": "8:53:06 pm",
+      "createdAt": 1788276186238
+    },
+    {
+      "id": "1788276194927-6k4we82dn",
+      "room": "general",
+      "sender": "ubix",
+      "displayName": "Aditya Singh",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocJZB8wlIUm1mcgeLiZwVsdma_Ijz-IrJKe-5OUKPAsCq1iJDQ=s96-c",
+      "text": "yes @spaceman",
+      "timestamp": "8:53:14 pm",
+      "createdAt": 1788276194927
+    },
+    {
+      "id": "1788276311549-knd7n6dhj",
+      "room": "gaming",
+      "sender": "spaceman",
+      "displayName": "Aditya Singh",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocLJjkjtiGr_S3LyoREbL2DRUTvaI2gL65oeilFPF_epZBIKazk=s96-c",
+      "text": "@all",
+      "timestamp": "8:55:11 pm",
+      "createdAt": 1788276311549
+    },
+    {
+      "id": "1788276424587-ia1w54bx2",
+      "room": "general",
+      "sender": "ubix",
+      "displayName": "Aditya Singh",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocJZB8wlIUm1mcgeLiZwVsdma_Ijz-IrJKe-5OUKPAsCq1iJDQ=s96-c",
+      "text": "@spaceman, how health?",
+      "timestamp": "8:57:04 pm",
+      "createdAt": 1788276424587
+    },
+    {
+      "id": "1788276443206-a5k20l95y",
+      "room": "general",
+      "sender": "spaceman",
+      "displayName": "Aditya Singh",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocLJjkjtiGr_S3LyoREbL2DRUTvaI2gL65oeilFPF_epZBIKazk=s96-c",
+      "text": "all good @ubix",
+      "timestamp": "8:57:23 pm",
+      "createdAt": 1788276443206
+    },
+    {
+      "id": "1788276454571-9szshotwv",
+      "room": "general",
+      "sender": "spaceman",
+      "displayName": "Aditya Singh",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocLJjkjtiGr_S3LyoREbL2DRUTvaI2gL65oeilFPF_epZBIKazk=s96-c",
+      "text": "glad to hear it",
+      "timestamp": "8:57:34 pm",
+      "createdAt": 1788276454571
+    },
+    {
+      "id": "1788276465526-h3e915ric",
+      "room": "general",
+      "sender": "ubix",
+      "displayName": "Aditya Singh",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocJZB8wlIUm1mcgeLiZwVsdma_Ijz-IrJKe-5OUKPAsCq1iJDQ=s96-c",
+      "text": "okay then see you soon",
+      "timestamp": "8:57:45 pm",
+      "createdAt": 1788276465526
+    }
+  ]
 }

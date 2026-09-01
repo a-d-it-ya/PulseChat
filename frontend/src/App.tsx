@@ -11,6 +11,8 @@ export function App() {
   const [observabilityOpen, setObservabilityOpen] = useState(true);
 
   const {
+    wsUrl,
+    updateWsUrl,
     wsStatus,
     tcpStatus,
     profile,
@@ -38,12 +40,14 @@ export function App() {
     <div className="h-screen w-screen flex flex-col bg-pulse-bg text-pulse-text overflow-hidden">
       {/* 1. TOP HEADER */}
       <Header
+        wsUrl={wsUrl}
         wsStatus={wsStatus}
         tcpStatus={tcpStatus}
         profile={profile}
         isRegistered={isRegistered}
         observabilityOpen={observabilityOpen}
         onToggleObservability={() => setObservabilityOpen(!observabilityOpen)}
+        onUpdateWsUrl={updateWsUrl}
         onLogout={logout}
         uptimeSec={metrics?.uptime_sec}
       />
