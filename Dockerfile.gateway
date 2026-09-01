@@ -1,0 +1,15 @@
+FROM node:20-alpine
+
+WORKDIR /app
+COPY gateway/package*.json ./
+RUN npm install
+
+COPY gateway/ ./
+RUN npm run build
+
+EXPOSE 3001
+ENV PORT=3001
+ENV TCP_HOST=server
+ENV TCP_PORT=9000
+
+CMD ["npm", "start"]

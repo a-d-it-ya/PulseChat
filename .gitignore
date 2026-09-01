@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+build/
+bin/
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+frontend/.env
+gateway/.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

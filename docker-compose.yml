@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: pulsechat-server
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    networks:
+      - pulse-net
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    container_name: pulsechat-gateway
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - TCP_HOST=server
+      - TCP_PORT=9000
+    depends_on:
+      - server
+    networks:
+      - pulse-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: pulsechat-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - gateway
+    networks:
+      - pulse-net
+
+networks:
+  pulse-net:
+    driver: bridge

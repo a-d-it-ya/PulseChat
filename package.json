@@ -1,0 +1,12 @@
+{
+  "name": "pulsechat-workspace",
+  "version": "1.0.0",
+  "description": "PulseChat Web UI and WebSocket Gateway workspace",
+  "scripts": {
+    "gateway:install": "npm --prefix gateway install",
+    "gateway:dev": "npm --prefix gateway run dev",
+    "frontend:install": "npm --prefix frontend install",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "install:all": "npm --prefix gateway install && npm --prefix frontend install"
+  }
+}

@@ -1,0 +1,453 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { MessageType, ChatMessage, RoomItem, UserItem, SystemMetrics, TelemetryEvent, UserProfile, UserStatus } from '../types';
+
+const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:3001`;
+
+const STORAGE_KEY_PROFILE = 'pulsechat_user_profile';
+const STORAGE_KEY_ROOM = 'pulsechat_current_room';
+const STORAGE_KEY_MESSAGES = 'pulsechat_messages_history';
+
+export function usePulseChat() {
+  const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('connecting');
+  const [tcpStatus, setTcpStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
+
+  // Stored profile from localStorage (if any)
+  const [profile, setProfile] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_PROFILE);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [isRegistered, setIsRegistered] = useState<boolean>(() => !!profile);
+  const [currentRoom, setCurrentRoom] = useState<string>(() => {
+    return localStorage.getItem(STORAGE_KEY_ROOM) || 'general';
+  });
+  const [activeDmUser, setActiveDmUser] = useState<string | null>(null);
+
+  // Stored chat messages from localStorage
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_MESSAGES);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [rooms, setRooms] = useState<RoomItem[]>([{ name: 'general', users: 0 }]);
+  const [users, setUsers] = useState<UserItem[]>([]);
+  const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
+  const [telemetryEvents, setTelemetryEvents] = useState<TelemetryEvent[]>([]);
+  const [registrationError, setRegistrationError] = useState<string | null>(null);
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const heartbeatTimerRef = useRef<number | null>(null);
+
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
+
+  const currentRoomRef = useRef(currentRoom);
+  currentRoomRef.current = currentRoom;
+
+  // Persist messages whenever updated (keep up to last 200 messages)
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(messages.slice(-200)));
+    } catch {}
+  }, [messages]);
+
+  // Persist profile
+  useEffect(() => {
+    if (profile) {
+      localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(profile));
+    } else {
+      localStorage.removeItem(STORAGE_KEY_PROFILE);
+    }
+  }, [profile]);
+
+  // Persist room
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_ROOM, currentRoom);
+  }, [currentRoom]);
+
+  // Helper to add message
+  const appendMessage = useCallback((msg: Omit<ChatMessage, 'id'>) => {
+    const newMsg: ChatMessage = {
+      ...msg,
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    };
+    setMessages((prev) => [...prev, newMsg]);
+  }, []);
+
+  // Send action to gateway
+  const sendAction = useCallback((action: string, payload: Record<string, any> = {}) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action, ...payload }));
+    }
+  }, []);
+
+  // Connect to Gateway WebSocket
+  const connect = useCallback(() => {
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
+    setWsStatus('connecting');
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setWsStatus('connected');
+      // Auto-register if we have stored profile
+      if (profileRef.current?.username) {
+        ws.send(JSON.stringify({
+          action: 'register',
+          username: profileRef.current.username,
+          displayName: profileRef.current.displayName,
+          email: profileRef.current.email,
+          avatarUrl: profileRef.current.avatarUrl,
+          status: profileRef.current.status,
+          activityText: profileRef.current.activityText
+        }));
+
+        if (currentRoomRef.current && currentRoomRef.current !== 'general') {
+          ws.send(JSON.stringify({
+            action: 'join_room',
+            room: currentRoomRef.current
+          }));
+        }
+      }
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        // 1. TCP Status
+        if (data.event === 'tcp_status') {
+          setTcpStatus(data.status);
+        }
+
+        // 2. Rich Presence List
+        if (data.event === 'presence_list' && Array.isArray(data.users)) {
+          setUsers(data.users);
+        }
+
+        // 3. Real C++ Server Metrics
+        if (data.event === 'system_metrics' && data.data) {
+          setMetrics(data.data);
+          if (data.data.rooms && Array.isArray(data.data.rooms)) {
+            setRooms(data.data.rooms);
+          }
+        }
+
+        // 4. Live Telemetry Event
+        if (data.event === 'telemetry_event' && data.eventData) {
+          setTelemetryEvents((prev) => [data.eventData, ...prev.slice(0, 79)]);
+        }
+
+        // 5. PCAP Frame from C++ Server
+        if (data.event === 'pcap_frame' && data.frame) {
+          const frame = data.frame;
+          const timeStr = frame.timestamp || new Date().toLocaleTimeString();
+
+          switch (frame.type) {
+            case MessageType.SERVER_NOTIFICATION: {
+              const payload: string = frame.payload;
+
+              // Filter out room/user list dumps from chat feed
+              if (payload.startsWith('=== Active Rooms') || payload.startsWith('=== Online Users')) {
+                return;
+              }
+
+              // Welcome confirmation
+              if (payload.includes('Welcome to PulseChat')) {
+                setIsRegistered(true);
+                setRegistrationError(null);
+              }
+
+              // Room join confirmation
+              const joinMatch = payload.match(/You joined room #([\w-]+)/);
+              if (joinMatch) {
+                setCurrentRoom(joinMatch[1]);
+                setActiveDmUser(null);
+              }
+
+              // Room leave confirmation
+              if (payload.includes('returned to #general')) {
+                setCurrentRoom('general');
+                setActiveDmUser(null);
+              }
+
+              appendMessage({
+                type: frame.type,
+                sender: 'SYSTEM',
+                text: payload,
+                timestamp: timeStr,
+                isSystem: true,
+                rawHex: frame.rawHex
+              });
+              break;
+            }
+
+            case MessageType.CHAT_MESSAGE: {
+              const payload = frame.payload;
+              let sender = 'Unknown';
+              let room = currentRoomRef.current;
+              let text = payload;
+
+              const match = payload.match(/^\[([\w-]+)\]\s*([\w-]+):\s*(.*)$/);
+              if (match) {
+                room = match[1];
+                sender = match[2];
+                text = match[3];
+              }
+
+              appendMessage({
+                type: frame.type,
+                sender,
+                room,
+                text,
+                timestamp: timeStr,
+                rawHex: frame.rawHex
+              });
+              break;
+            }
+
+            case MessageType.PRIVATE_MESSAGE: {
+              const payload = frame.payload;
+              let sender = 'Direct Message';
+
+              const dmMatch = payload.match(/^\[DM from ([\w-]+)\]:\s*(.*)$/);
+              const toMatch = payload.match(/^\[DM to ([\w-]+)\]:\s*(.*)$/);
+
+              let text = payload;
+              if (dmMatch) {
+                sender = dmMatch[1];
+                text = dmMatch[2];
+              } else if (toMatch) {
+                sender = `To: ${toMatch[1]}`;
+                text = toMatch[2];
+              }
+
+              appendMessage({
+                type: frame.type,
+                sender,
+                text,
+                timestamp: timeStr,
+                isPrivate: true,
+                rawHex: frame.rawHex
+              });
+              break;
+            }
+
+            case MessageType.ERROR_RESPONSE: {
+              if (!profileRef.current) {
+                setRegistrationError(frame.payload);
+              }
+              appendMessage({
+                type: frame.type,
+                sender: 'ERROR',
+                text: frame.payload,
+                timestamp: timeStr,
+                isError: true,
+                rawHex: frame.rawHex
+              });
+              break;
+            }
+
+            default:
+              break;
+          }
+        }
+      } catch (err) {
+        console.error('WebSocket parse error:', err);
+      }
+    };
+
+    ws.onerror = () => {
+      setWsStatus('error');
+    };
+
+    ws.onclose = () => {
+      setWsStatus('disconnected');
+      setTcpStatus('disconnected');
+      if (!reconnectTimerRef.current) {
+        reconnectTimerRef.current = window.setTimeout(() => {
+          reconnectTimerRef.current = null;
+          connect();
+        }, 2000);
+      }
+    };
+  }, [appendMessage]);
+
+  useEffect(() => {
+    connect();
+    return () => {
+      if (wsRef.current) {
+        try {
+          wsRef.current.close();
+        } catch {}
+      }
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+    };
+  }, [connect]);
+
+  // Periodic heartbeat & room refresher
+  useEffect(() => {
+    heartbeatTimerRef.current = window.setInterval(() => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && profileRef.current) {
+        sendAction('heartbeat');
+        sendAction('list_rooms');
+      }
+    }, 4000);
+
+    return () => {
+      if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+    };
+  }, [sendAction]);
+
+  // Register or login
+  const login = useCallback((userProfile: UserProfile) => {
+    setProfile(userProfile);
+    setIsRegistered(true);
+    setRegistrationError(null);
+    sendAction('register', {
+      username: userProfile.username,
+      displayName: userProfile.displayName,
+      email: userProfile.email,
+      avatarUrl: userProfile.avatarUrl,
+      status: userProfile.status,
+      activityText: userProfile.activityText
+    });
+  }, [sendAction]);
+
+  // Update Status & Activity ("what they are doing")
+  const updateStatus = useCallback((status: UserStatus, activityText?: string) => {
+    if (!profile) return;
+    const updated: UserProfile = {
+      ...profile,
+      status,
+      activityText: activityText !== undefined ? activityText : profile.activityText
+    };
+    setProfile(updated);
+    sendAction('update_status', {
+      status,
+      activityText: updated.activityText
+    });
+  }, [profile, sendAction]);
+
+  // Logout / Switch account
+  const logout = useCallback(() => {
+    setProfile(null);
+    setIsRegistered(false);
+    localStorage.removeItem(STORAGE_KEY_PROFILE);
+    if (wsRef.current) {
+      try {
+        wsRef.current.close();
+      } catch {}
+    }
+  }, []);
+
+  const joinRoom = useCallback((roomName: string) => {
+    const trimmed = roomName.trim();
+    if (!trimmed) return;
+    sendAction('join_room', { room: trimmed });
+    setActiveDmUser(null);
+  }, [sendAction]);
+
+  const leaveRoom = useCallback(() => {
+    sendAction('leave_room');
+    setActiveDmUser(null);
+  }, [sendAction]);
+
+  const sendPrivateMessage = useCallback((targetUser: string, text: string) => {
+    if (!targetUser || !text.trim()) return;
+    sendAction('private_message', { target: targetUser, text: text.trim() });
+  }, [sendAction]);
+
+  const sendMessage = useCallback((rawInput: string) => {
+    const input = rawInput.trim();
+    if (!input) return;
+
+    if (input.startsWith('/')) {
+      if (input.startsWith('/join ')) {
+        const r = input.substring(6).trim();
+        if (r) joinRoom(r);
+      } else if (input === '/leave') {
+        leaveRoom();
+      } else if (input === '/rooms') {
+        sendAction('list_rooms');
+      } else if (input === '/users') {
+        sendAction('list_users');
+      } else if (input.startsWith('/msg ')) {
+        const parts = input.substring(5).split(' ');
+        if (parts.length >= 2) {
+          const target = parts[0];
+          const text = parts.slice(1).join(' ');
+          sendPrivateMessage(target, text);
+        } else {
+          appendMessage({
+            type: MessageType.ERROR_RESPONSE,
+            sender: 'SYSTEM',
+            text: 'Usage: /msg <username> <message>',
+            timestamp: new Date().toLocaleTimeString(),
+            isError: true
+          });
+        }
+      } else if (input === '/help') {
+        appendMessage({
+          type: MessageType.SERVER_NOTIFICATION,
+          sender: 'HELP',
+          text: 'Available Commands: /join <room>, /leave, /rooms, /users, /msg <user> <message>, /help',
+          timestamp: new Date().toLocaleTimeString(),
+          isSystem: true
+        });
+      } else {
+        appendMessage({
+          type: MessageType.ERROR_RESPONSE,
+          sender: 'SYSTEM',
+          text: `Unknown command: ${input}. Type /help for command list.`,
+          timestamp: new Date().toLocaleTimeString(),
+          isError: true
+        });
+      }
+      return;
+    }
+
+    if (activeDmUser) {
+      sendPrivateMessage(activeDmUser, input);
+    } else {
+      sendAction('chat', { text: input });
+    }
+  }, [activeDmUser, joinRoom, leaveRoom, sendPrivateMessage, sendAction, appendMessage]);
+
+  return {
+    wsStatus,
+    tcpStatus,
+    profile,
+    username: profile?.username || '',
+    isRegistered,
+    currentRoom,
+    activeDmUser,
+    setActiveDmUser,
+    messages,
+    rooms,
+    users,
+    metrics,
+    telemetryEvents,
+    registrationError,
+    login,
+    logout,
+    updateStatus,
+    joinRoom,
+    leaveRoom,
+    sendPrivateMessage,
+    sendMessage
+  };
+}
