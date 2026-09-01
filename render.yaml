@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: pulsechat-backend
+    runtime: docker
+    plan: free
+    region: singapore
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: TCP_HOST
+        value: 127.0.0.1
+      - key: TCP_PORT
+        value: 9000
+    healthCheckPath: /health
