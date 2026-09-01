@@ -200,7 +200,7 @@ void ReactorServer::handle_read(int client_fd) {
     }
 
     if (corrupted) {
-        LOG_WARN("Reactor: Corrupted frame from fd=" << client_fd);
+        LOG_DEBUG("Reactor: Non-protocol probe from fd=" << client_fd);
         send_message_to_fd(client_fd, Message::make_error("Corrupted protocol frame"));
         handle_close(client_fd, "Protocol violation");
     }
