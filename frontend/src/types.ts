@@ -19,6 +19,7 @@ export interface ChatMessage {
   id: string;
   type: MessageType;
   sender: string;
+  targetUser?: string;
   displayName?: string;
   avatarUrl?: string;
   room?: string;

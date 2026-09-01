@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Hash, Users, Plus, MessageSquare, Radio, Shield, Smile, Edit3, Check, LogOut, Settings, Lock, KeyRound } from 'lucide-react';
-import { RoomItem, UserItem, UserProfile, UserStatus } from '../types';
+import { Hash, Users, Plus, MessageSquare, Radio, Shield, Smile, Edit3, Check, LogOut, Settings, Lock, KeyRound, MessageCircle } from 'lucide-react';
+import { RoomItem, UserItem, UserProfile, UserStatus, ChatMessage } from '../types';
 
 interface SidebarProps {
   currentRoom: string;
   rooms: RoomItem[];
   users: UserItem[];
+  messages: ChatMessage[];
   profile: UserProfile | null;
   activeDmUser: string | null;
   onSelectRoom: (roomName: string, password?: string) => void;
@@ -19,6 +20,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentRoom,
   rooms,
   users,
+  messages,
   profile,
   activeDmUser,
   onSelectRoom,
@@ -60,6 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setJoinPassword('');
     } else {
       onSelectRoom(room.name);
+      onSelectDmUser(null);
     }
   };
 
@@ -87,6 +90,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  // Find users with active DM history
+  const dmUsersSet = new Set<string>();
+  for (const m of messages) {
+    if (m.isPrivate) {
+      if (m.sender && m.sender !== 'SYSTEM' && m.sender !== 'You' && m.sender !== profile?.username) {
+        dmUsersSet.add(m.sender.toLowerCase());
+      }
+      if (m.targetUser && m.targetUser !== profile?.username) {
+        dmUsersSet.add(m.targetUser.toLowerCase());
+      }
+    }
+  }
+
+  // Also include currently active DM user
+  if (activeDmUser) {
+    dmUsersSet.add(activeDmUser.toLowerCase());
+  }
+
+  const dmUserList = Array.from(dmUsersSet);
   const displayRooms = rooms.length > 0 ? rooms : [{ name: 'general', users: 1, isProtected: false }];
 
   return (
@@ -107,7 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        <div className="space-y-0.5 overflow-y-auto max-h-48 pr-1">
+        <div className="space-y-0.5 overflow-y-auto max-h-36 pr-1">
           {displayRooms.map((room) => {
             const isActive = !activeDmUser && currentRoom.toLowerCase() === room.name.toLowerCase();
             return (
@@ -136,7 +158,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* 2. ONLINE USERS & PRESENCE SECTION */}
+      {/* 2. DIRECT MESSAGES (DMs) SECTION */}
+      <div className="p-3 border-b border-pulse-border">
+        <div className="flex items-center justify-between mb-2 px-1">
+          <span className="text-[11px] font-mono uppercase tracking-wider text-pulse-muted flex items-center gap-1.5">
+            <MessageCircle className="w-3.5 h-3.5 text-pulse-magenta" />
+            Direct Messages ({dmUserList.length})
+          </span>
+        </div>
+
+        <div className="space-y-0.5 overflow-y-auto max-h-36 pr-1">
+          {dmUserList.length === 0 ? (
+            <p className="text-[11px] font-mono text-pulse-muted/50 px-2 py-1 italic">
+              Click any active peer below to start a private DM.
+            </p>
+          ) : (
+            dmUserList.map((targetHandle) => {
+              const isSelected = activeDmUser?.toLowerCase() === targetHandle.toLowerCase();
+              const peerInfo = users.find((u) => u.username.toLowerCase() === targetHandle.toLowerCase());
+
+              return (
+                <button
+                  key={targetHandle}
+                  onClick={() => onSelectDmUser(targetHandle)}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-mono transition-all ${
+                    isSelected
+                      ? 'bg-pulse-magenta/15 text-pulse-magenta border border-pulse-magenta/40 font-bold shadow-[0_0_12px_rgba(255,0,127,0.2)]'
+                      : 'text-pulse-muted hover:bg-pulse-surface hover:text-white border border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <div
+                      className={`w-2 h-2 rounded-full shrink-0 ${getStatusColor(peerInfo?.status || 'offline')}`}
+                    />
+                    <span className="truncate font-bold">@{targetHandle}</span>
+                  </div>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-pulse-surface border border-pulse-border text-pulse-magenta font-mono">
+                    DM
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* 3. ACTIVE PEERS SECTION (Shown by Unique Username) */}
       <div className="flex-1 p-3 flex flex-col min-h-0">
         <div className="flex items-center justify-between mb-2 px-1">
           <span className="text-[11px] font-mono uppercase tracking-wider text-pulse-muted flex items-center gap-1.5">
@@ -160,19 +227,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   key={u.username}
                   disabled={isMe}
                   onClick={() => onSelectDmUser(isDmActive ? null : u.username)}
-                  className={`w-full flex flex-col px-2.5 py-1.5 rounded-lg text-xs font-mono transition-all text-left ${
+                  className={`w-full flex flex-col px-2.5 py-1.5 rounded-lg text-xs font-mono transition-all text-left group ${
                     isDmActive
                       ? 'bg-pulse-magenta/10 text-pulse-magenta border border-pulse-magenta/30 font-semibold shadow-[0_0_10px_rgba(255,0,127,0.15)]'
                       : isMe
                       ? 'bg-pulse-surface/30 border border-pulse-border/50 text-white cursor-default'
-                      : 'text-pulse-muted hover:bg-pulse-surface hover:text-white border border-transparent'
+                      : 'text-pulse-muted hover:bg-pulse-surface hover:text-white border border-transparent cursor-pointer'
                   }`}
                   title={isMe ? 'You' : `Click to DM @${u.username}`}
                 >
                   <div className="flex items-center justify-between w-full">
                     <div className="flex items-center gap-2 truncate">
                       <div className={`w-2 h-2 rounded-full shrink-0 ${getStatusColor(u.status)}`} />
-                      <span className="truncate font-medium text-white">{u.displayName || u.username}</span>
+                      {/* PROMINENT UNIQUE USERNAME */}
+                      <span className="truncate font-bold text-white group-hover:text-pulse-accent">
+                        @{u.username}
+                      </span>
                       {isMe && (
                         <span className="text-[9px] px-1 py-0.2 rounded bg-pulse-accent/20 border border-pulse-accent/40 text-pulse-accent font-bold">
                           YOU
@@ -184,6 +254,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </span>
                   </div>
 
+                  {/* Activity text */}
                   {u.activityText && (
                     <p className="text-[10px] text-pulse-accent/80 font-sans truncate pl-4 mt-0.5">
                       {u.activityText}
@@ -196,7 +267,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* 3. USER PROFILE & STATUS FOOTER */}
+      {/* 4. USER PROFILE & STATUS FOOTER */}
       <div className="p-3 border-t border-pulse-border bg-pulse-surface/40 flex items-center justify-between">
         <div
           onClick={() => setShowStatusModal(true)}
@@ -212,7 +283,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               />
             ) : (
               <div className="w-7 h-7 rounded bg-pulse-accent/10 border border-pulse-accent/30 text-pulse-accent flex items-center justify-center text-xs font-mono font-bold">
-                {profile?.displayName?.charAt(0).toUpperCase() || 'U'}
+                {profile?.username?.charAt(0).toUpperCase() || 'U'}
               </div>
             )}
             <div
@@ -224,7 +295,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <div className="min-w-0 flex-1">
             <p className="text-xs font-mono font-bold text-white truncate group-hover:text-pulse-accent transition-colors">
-              {profile?.displayName || profile?.username}
+              @{profile?.username}
             </p>
             <p className="text-[10px] font-mono text-pulse-muted truncate">
               {profile?.activityText || 'Set custom status...'}
@@ -241,7 +312,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* 4. CREATE ROOM MODAL (Public vs Password Protected) */}
+      {/* 5. CREATE ROOM MODAL */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm bg-pulse-card border border-pulse-border rounded-xl shadow-2xl p-5 space-y-4">
@@ -332,7 +403,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       )}
 
-      {/* 5. PASSWORD PROMPT MODAL (For Entering Locked Rooms) */}
+      {/* 6. PASSWORD PROMPT MODAL */}
       {promptTargetRoom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm bg-pulse-card border border-pulse-yellow/50 rounded-xl shadow-2xl p-5 space-y-4">
@@ -391,7 +462,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       )}
 
-      {/* 6. STATUS CHANGER MODAL */}
+      {/* 7. STATUS CHANGER MODAL */}
       {showStatusModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm bg-pulse-card border border-pulse-border rounded-xl shadow-2xl p-5 space-y-4">

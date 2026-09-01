@@ -47,11 +47,12 @@ export function App() {
 
       {/* 2. MAIN 3-PANEL LAYOUT */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        {/* Left Sidebar: Rooms, Online Users & Presence Status */}
+        {/* Left Sidebar: Rooms, Online Users & Direct Messages */}
         <Sidebar
           currentRoom={currentRoom}
           rooms={rooms}
           users={users}
+          messages={messages}
           profile={profile}
           activeDmUser={activeDmUser}
           onSelectRoom={(r, password) => {

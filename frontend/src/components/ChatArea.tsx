@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Hash, MessageSquare, Terminal, AlertTriangle, ArrowDown, LogOut, AtSign, Bell } from 'lucide-react';
+import { Send, Hash, MessageSquare, Terminal, AlertTriangle, ArrowDown, LogOut, AtSign, Bell, ArrowLeft } from 'lucide-react';
 import { ChatMessage, MessageType, UserItem } from '../types';
 
 interface ChatAreaProps {
@@ -33,14 +33,40 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Filter messages relevant to current room / DM or system notifications
+  // Filter messages strictly relevant to the currently viewed room or active DM
   const filteredMessages = messages.filter((msg) => {
-    if (msg.isSystem || msg.isError) return true;
+    // 1. Direct Message Mode (Strict 1-on-1 private filter)
     if (activeDmUser) {
-      return msg.isPrivate;
+      if (!msg.isPrivate) return false;
+      const dmTarget = activeDmUser.toLowerCase();
+      const myName = currentUsername.toLowerCase();
+      const sender = msg.sender.toLowerCase();
+      const target = msg.targetUser?.toLowerCase();
+
+      return (
+        sender === dmTarget ||
+        target === dmTarget ||
+        (sender === 'you' && target === dmTarget) ||
+        (sender === myName && target === dmTarget)
+      );
     }
-    // Room chat
-    return msg.room?.toLowerCase() === currentRoom.toLowerCase() || msg.isPrivate;
+
+    // 2. Error messages
+    if (msg.isError) return true;
+
+    // 3. Room Messages (Exclude private DMs from room chat feed)
+    if (msg.isPrivate) return false;
+
+    if (msg.room) {
+      return msg.room.toLowerCase() === currentRoom.toLowerCase();
+    }
+
+    // Generic system notification (only shown in #general)
+    if (msg.isSystem) {
+      return currentRoom.toLowerCase() === 'general';
+    }
+
+    return false;
   });
 
   // Scroll to bottom on new message
@@ -62,7 +88,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const val = e.target.value;
     setInputText(val);
 
-    // Detect @ typing for auto-complete
     const cursor = e.target.selectionStart || val.length;
     const textBeforeCursor = val.slice(0, cursor);
     const lastAtMatch = textBeforeCursor.match(/@([\w-]*)$/);
@@ -138,12 +163,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <div className="flex items-center gap-2 min-w-0">
           {activeDmUser ? (
             <>
+              <button
+                onClick={onClearDm}
+                className="p-1 rounded hover:bg-pulse-surface text-pulse-muted hover:text-white mr-1 transition-colors"
+                title="Back to Room"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
               <div className="w-6 h-6 rounded bg-pulse-magenta/10 border border-pulse-magenta/40 text-pulse-magenta flex items-center justify-center">
                 <MessageSquare className="w-3.5 h-3.5" />
               </div>
               <div>
                 <span className="text-sm font-bold text-white font-mono flex items-center gap-2">
-                  Direct Message: <span className="text-pulse-magenta">@{activeDmUser}</span>
+                  Direct Message: <span className="text-pulse-magenta font-bold">@{activeDmUser}</span>
                 </span>
               </div>
             </>
@@ -167,7 +199,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           {activeDmUser ? (
             <button
               onClick={onClearDm}
-              className="text-xs font-mono px-2 py-1 rounded bg-pulse-surface hover:bg-pulse-card border border-pulse-border text-pulse-muted hover:text-white transition-colors"
+              className="text-xs font-mono px-2.5 py-1 rounded bg-pulse-surface hover:bg-pulse-card border border-pulse-border text-pulse-muted hover:text-white transition-colors"
             >
               Back to #{currentRoom}
             </button>
@@ -195,29 +227,32 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         {filteredMessages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 text-pulse-muted">
             <div className="w-12 h-12 rounded-xl bg-pulse-surface border border-pulse-border flex items-center justify-center mb-3 text-pulse-accent">
-              <Hash className="w-6 h-6" />
+              {activeDmUser ? <MessageSquare className="w-6 h-6 text-pulse-magenta" /> : <Hash className="w-6 h-6" />}
             </div>
             <p className="text-sm font-bold text-white mb-1">
-              Welcome to #{currentRoom}
+              {activeDmUser ? `Direct Conversation with @${activeDmUser}` : `Welcome to #${currentRoom}`}
             </p>
             <p className="text-xs max-w-sm">
-              This is the start of the #{currentRoom} chat room. All messages are streamed over raw POSIX sockets.
+              {activeDmUser
+                ? `Send a private direct message to @${activeDmUser}. Only you and @${activeDmUser} can see these messages.`
+                : `This is the start of the #${currentRoom} channel. All messages are streamed over raw POSIX sockets.`}
             </p>
           </div>
         ) : (
           filteredMessages.map((msg) => {
-            const isMe = msg.sender.toLowerCase() === currentUsername.toLowerCase();
+            const isMe =
+              msg.sender.toLowerCase() === currentUsername.toLowerCase() ||
+              msg.sender.toLowerCase() === 'you';
 
             // 1. System Notification Message
             if (msg.isSystem) {
               return (
                 <div
                   key={msg.id}
-                  className="flex items-start gap-2 py-1 px-3 rounded-lg bg-pulse-surface/30 border border-pulse-border/40 text-xs text-pulse-muted text-left"
+                  className="flex items-center gap-2 py-1 px-3 rounded-lg bg-pulse-surface/30 border border-pulse-border/40 text-xs text-pulse-muted text-left"
                 >
-                  <Terminal className="w-3.5 h-3.5 text-pulse-accent shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-pulse-accent font-bold mr-2">[SYSTEM]</span>
+                  <Terminal className="w-3.5 h-3.5 text-pulse-accent shrink-0" />
+                  <div className="flex-1 min-w-0 truncate">
                     <span className="text-pulse-muted/90">{msg.text}</span>
                   </div>
                   <span className="text-[10px] text-pulse-muted/50 shrink-0">{msg.timestamp}</span>
@@ -244,12 +279,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               return (
                 <div
                   key={msg.id}
-                  className="p-2.5 rounded-xl bg-pulse-magenta/10 border border-pulse-magenta/30 shadow-[0_0_10px_rgba(255,0,127,0.1)] text-left"
+                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                    isMe
+                      ? 'bg-pulse-surface/60 border-pulse-magenta/40 shadow-[0_0_10px_rgba(255,0,127,0.08)]'
+                      : 'bg-pulse-magenta/15 border-pulse-magenta/50 shadow-[0_0_12px_rgba(255,0,127,0.15)]'
+                  }`}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-1.5 text-xs text-pulse-magenta font-bold">
                       <MessageSquare className="w-3 h-3" />
-                      <span>{msg.sender}</span>
+                      <span>{isMe ? 'You' : `@${msg.sender}`}</span>
                     </div>
                     <span className="text-[10px] text-pulse-muted">{msg.timestamp}</span>
                   </div>
@@ -284,11 +323,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         isMe ? 'text-pulse-accent' : 'text-white'
                       }`}
                     >
-                      {msg.displayName || msg.sender}
+                      @{msg.sender}
                     </span>
-                    {msg.displayName && msg.displayName !== msg.sender && (
-                      <span className="text-[10px] text-pulse-muted">@{msg.sender}</span>
-                    )}
                     {msg.isMentioned && (
                       <span className="text-[9px] px-1 py-0.2 rounded bg-pulse-accent text-black font-extrabold flex items-center gap-0.5 shadow">
                         <Bell className="w-2.5 h-2.5" />
@@ -328,9 +364,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   <span className="text-xs font-mono font-bold text-white group-hover:text-pulse-accent">
                     @{u.username}
                   </span>
-                  {u.displayName && (
-                    <span className="text-[10px] text-pulse-muted ml-1.5">({u.displayName})</span>
-                  )}
                 </div>
               </button>
             ))}
@@ -389,7 +422,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               onChange={handleInputChange}
               placeholder={
                 activeDmUser
-                  ? `Message @${activeDmUser}...`
+                  ? `Direct message @${activeDmUser}... (Enter to send)`
                   : `Message #${currentRoom}... (type @ to mention)`
               }
               className="w-full bg-pulse-card border border-pulse-border focus:border-pulse-accent rounded-xl px-4 py-2.5 text-xs font-mono text-white placeholder-pulse-muted/50 focus:outline-none focus:ring-1 focus:ring-pulse-accent transition-all"

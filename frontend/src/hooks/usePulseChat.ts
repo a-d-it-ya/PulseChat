@@ -79,7 +79,7 @@ export function usePulseChat() {
   // Update document title on mention
   useEffect(() => {
     if (mentionCount > 0) {
-      document.title = `(${mentionCount}) PulseChat — Mentioned!`;
+      document.title = `(${mentionCount}) PulseChat — Notification!`;
     } else {
       document.title = `PulseChat — High-Concurrency Systems Messaging`;
     }
@@ -101,7 +101,7 @@ export function usePulseChat() {
       msg.text.toLowerCase().includes(`@${profileRef.current.username.toLowerCase()}`)
     );
 
-    if (isMeMentioned && !msg.isSystem && msg.sender !== profileRef.current?.username) {
+    if ((isMeMentioned || msg.isPrivate) && !msg.isSystem && msg.sender !== profileRef.current?.username) {
       notificationAudio.playMentionChime();
       setMentionCount((prev) => prev + 1);
     }
@@ -180,13 +180,15 @@ export function usePulseChat() {
         // 4. Historical Room Messages Replay
         if (data.event === 'room_history' && Array.isArray(data.messages)) {
           const myUser = profileRef.current?.username?.toLowerCase();
+          const targetRoom = data.room || currentRoomRef.current;
+
           const loaded: ChatMessage[] = data.messages.map((m: any) => ({
             id: m.id,
             type: MessageType.CHAT_MESSAGE,
             sender: m.sender,
             displayName: m.displayName,
             avatarUrl: m.avatarUrl,
-            room: m.room,
+            room: m.room || targetRoom,
             text: m.text,
             timestamp: m.timestamp,
             isMentioned: Boolean(myUser && m.text?.toLowerCase().includes(`@${myUser}`))
@@ -225,22 +227,40 @@ export function usePulseChat() {
                 setRegistrationError(null);
               }
 
-              // Room join confirmation
+              let notificationRoom: string | undefined = undefined;
+
+              // Room join confirmation ("You joined room #systems")
               const joinMatch = payload.match(/You joined room #([\w-]+)/);
               if (joinMatch) {
-                setCurrentRoom(joinMatch[1]);
+                const r = joinMatch[1];
+                setCurrentRoom(r);
                 setActiveDmUser(null);
+                notificationRoom = r;
+              }
+
+              // Peer joined room ("[SERVER] ubix joined #systems")
+              const peerJoinMatch = payload.match(/\[SERVER\]\s+([\w-]+)\s+joined\s+#([\w-]+)/);
+              if (peerJoinMatch) {
+                notificationRoom = peerJoinMatch[2];
+              }
+
+              // Peer left room
+              const peerLeftMatch = payload.match(/\[SERVER\]\s+([\w-]+)\s+left/);
+              if (peerLeftMatch) {
+                notificationRoom = currentRoomRef.current;
               }
 
               // Room leave confirmation
               if (payload.includes('returned to #general')) {
                 setCurrentRoom('general');
                 setActiveDmUser(null);
+                notificationRoom = 'general';
               }
 
               appendMessage({
                 type: frame.type,
                 sender: 'SYSTEM',
+                room: notificationRoom,
                 text: payload,
                 timestamp: timeStr,
                 isSystem: true,
@@ -276,6 +296,7 @@ export function usePulseChat() {
             case MessageType.PRIVATE_MESSAGE: {
               const payload = frame.payload;
               let sender = 'Direct Message';
+              let targetUser: string | undefined = undefined;
 
               const dmMatch = payload.match(/^\[DM from ([\w-]+)\]:\s*(.*)$/);
               const toMatch = payload.match(/^\[DM to ([\w-]+)\]:\s*(.*)$/);
@@ -285,13 +306,15 @@ export function usePulseChat() {
                 sender = dmMatch[1];
                 text = dmMatch[2];
               } else if (toMatch) {
-                sender = `To: ${toMatch[1]}`;
+                targetUser = toMatch[1];
+                sender = profileRef.current?.username || 'You';
                 text = toMatch[2];
               }
 
               appendMessage({
                 type: frame.type,
                 sender,
+                targetUser,
                 text,
                 timestamp: timeStr,
                 isPrivate: true,
@@ -403,6 +426,7 @@ export function usePulseChat() {
     setProfile(null);
     setIsRegistered(false);
     localStorage.removeItem(STORAGE_KEY_PROFILE);
+    localStorage.removeItem(STORAGE_KEY_MESSAGES);
     if (wsRef.current) {
       try {
         wsRef.current.close();
@@ -423,9 +447,20 @@ export function usePulseChat() {
   }, [sendAction]);
 
   const sendPrivateMessage = useCallback((targetUser: string, text: string) => {
-    if (!targetUser || !text.trim()) return;
-    sendAction('private_message', { target: targetUser, text: text.trim() });
-  }, [sendAction]);
+    const trimmed = text.trim();
+    if (!targetUser || !trimmed) return;
+    sendAction('private_message', { target: targetUser, text: trimmed });
+
+    // Append outgoing message locally so it displays immediately in the DM chat feed
+    appendMessage({
+      type: MessageType.PRIVATE_MESSAGE,
+      sender: profileRef.current?.username || 'You',
+      targetUser: targetUser,
+      text: trimmed,
+      timestamp: new Date().toLocaleTimeString(),
+      isPrivate: true
+    });
+  }, [sendAction, appendMessage]);
 
   const sendMessage = useCallback((rawInput: string) => {
     const input = rawInput.trim();
