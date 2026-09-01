@@ -41,7 +41,7 @@ export class PulseDatabase {
   private data: DatabaseSchema;
 
   constructor(dbPath?: string) {
-    this.dbPath = dbPath || path.join(process.cwd(), 'data', 'pulsechat_db.json');
+    this.dbPath = dbPath || path.join(__dirname, '..', 'data', 'pulsechat_db.json');
     this.data = {
       users: {},
       rooms: {
@@ -184,10 +184,16 @@ export class PulseDatabase {
     if (existing) {
       // Check password if protected
       if (existing.isProtected && existing.password) {
-        if (!password || password.trim() !== existing.password.trim()) {
+        if (!password || !password.trim()) {
           return {
             success: false,
-            error: `Password required for protected room #${existing.name}.`
+            error: `Password required to join protected room #${existing.name}.`
+          };
+        }
+        if (password.trim() !== existing.password.trim()) {
+          return {
+            success: false,
+            error: `Incorrect password for protected room #${existing.name}. Access denied.`
           };
         }
       }
@@ -247,9 +253,21 @@ export class PulseDatabase {
     return newMsg;
   }
 
+  public addMessage(
+    room: string,
+    sender: string,
+    text: string,
+    displayName?: string,
+    avatarUrl?: string
+  ): DbMessage {
+    return this.saveMessage(room, sender, text, displayName, avatarUrl);
+  }
+
   public getRoomHistory(roomName: string, limit = 50): DbMessage[] {
     const target = roomName.toLowerCase();
     const matches = this.data.messages.filter((m) => m.room.toLowerCase() === target);
     return matches.slice(-limit);
   }
 }
+
+export const db = new PulseDatabase();

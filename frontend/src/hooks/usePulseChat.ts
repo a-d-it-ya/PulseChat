@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageType, ChatMessage, RoomItem, UserItem, SystemMetrics, TelemetryEvent, UserProfile, UserStatus } from '../types';
 import { notificationAudio } from '../utils/audio';
+import { ToastData } from '../components/Toast';
 
 const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:3001`;
 
@@ -43,6 +44,7 @@ export function usePulseChat() {
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [telemetryEvents, setTelemetryEvents] = useState<TelemetryEvent[]>([]);
   const [registrationError, setRegistrationError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastData | null>(null);
   const [mentionCount, setMentionCount] = useState<number>(0);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -327,13 +329,11 @@ export function usePulseChat() {
               if (!profileRef.current) {
                 setRegistrationError(frame.payload);
               }
-              appendMessage({
-                type: frame.type,
-                sender: 'ERROR',
+              // Show as Popup Toast Alert instead of polluting chat feed!
+              setToast({
                 text: frame.payload,
-                timestamp: timeStr,
-                isError: true,
-                rawHex: frame.rawHex
+                type: 'error',
+                id: Date.now()
               });
               break;
             }
@@ -484,12 +484,10 @@ export function usePulseChat() {
           const text = parts.slice(1).join(' ');
           sendPrivateMessage(target, text);
         } else {
-          appendMessage({
-            type: MessageType.ERROR_RESPONSE,
-            sender: 'SYSTEM',
+          setToast({
             text: 'Usage: /msg <username> <message>',
-            timestamp: new Date().toLocaleTimeString(),
-            isError: true
+            type: 'info',
+            id: Date.now()
           });
         }
       } else if (input === '/help') {
@@ -501,12 +499,10 @@ export function usePulseChat() {
           isSystem: true
         });
       } else {
-        appendMessage({
-          type: MessageType.ERROR_RESPONSE,
-          sender: 'SYSTEM',
+        setToast({
           text: `Unknown command: ${input}. Type /help for command list.`,
-          timestamp: new Date().toLocaleTimeString(),
-          isError: true
+          type: 'error',
+          id: Date.now()
         });
       }
       return;
@@ -534,6 +530,8 @@ export function usePulseChat() {
     metrics,
     telemetryEvents,
     registrationError,
+    toast,
+    setToast,
     mentionCount,
     login,
     logout,

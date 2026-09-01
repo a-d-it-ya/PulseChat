@@ -51,8 +51,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       );
     }
 
-    // 2. Error messages
-    if (msg.isError) return true;
+    // 2. Ignore error messages in chat feed (they appear in popup toast)
+    if (msg.isError) return false;
 
     // 3. Room Messages (Exclude private DMs from room chat feed)
     if (msg.isPrivate) return false;

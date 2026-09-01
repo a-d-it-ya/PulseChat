@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { ObservabilityPanel } from './components/ObservabilityPanel';
 import { RegistrationModal } from './components/RegistrationModal';
+import { Toast } from './components/Toast';
 
 export function App() {
   const [observabilityOpen, setObservabilityOpen] = useState(true);
@@ -23,6 +24,8 @@ export function App() {
     metrics,
     telemetryEvents,
     registrationError,
+    toast,
+    setToast,
     login,
     logout,
     updateStatus,
@@ -45,7 +48,10 @@ export function App() {
         uptimeSec={metrics?.uptime_sec}
       />
 
-      {/* 2. MAIN 3-PANEL LAYOUT */}
+      {/* 2. POPUP TOAST NOTIFICATIONS */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
+
+      {/* 3. MAIN 3-PANEL LAYOUT */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Left Sidebar: Rooms, Online Users & Direct Messages */}
         <Sidebar
@@ -88,7 +94,7 @@ export function App() {
         )}
       </div>
 
-      {/* 3. USER AUTHENTICATION & LOGIN MODAL */}
+      {/* 4. USER AUTHENTICATION & LOGIN MODAL */}
       {!isRegistered && (
         <RegistrationModal
           onLogin={login}
