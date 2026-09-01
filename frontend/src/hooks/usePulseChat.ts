@@ -10,15 +10,17 @@ const STORAGE_KEY_WS_URL = 'pulsechat_ws_url_override';
 
 export function getInitialWsUrl() {
   if (typeof window !== 'undefined') {
-    // Clear any stale local storage overrides
+    // Clear any stale local storage overrides from previous sessions
     try {
-      localStorage.removeItem(STORAGE_KEY_WS_URL);
+      localStorage.removeItem('pulsechat_ws_url');
+      localStorage.removeItem('pulsechat_custom_ws_url');
+      localStorage.removeItem('pulsechat_ws_url_override');
     } catch {}
 
     if (window.location.protocol === 'https:') {
-      return import.meta.env.VITE_WS_URL || 'wss://pulsechat-backend-yohc.onrender.com';
+      return 'wss://pulsechat-backend-yohc.onrender.com';
     }
-    return import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:3001`;
+    return `ws://${window.location.hostname}:3001`;
   }
   return 'ws://127.0.0.1:3001';
 }
