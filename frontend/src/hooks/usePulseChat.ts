@@ -16,7 +16,7 @@ export function getInitialWsUrl() {
     } catch {}
 
     if (window.location.protocol === 'https:') {
-      return import.meta.env.VITE_WS_URL || 'wss://api.pulsechatting.in';
+      return import.meta.env.VITE_WS_URL || 'wss://pulsechat-backend-yohc.onrender.com';
     }
     return import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:3001`;
   }
