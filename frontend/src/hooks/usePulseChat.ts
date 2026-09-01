@@ -9,10 +9,12 @@ const STORAGE_KEY_MESSAGES = 'pulsechat_messages_history';
 const STORAGE_KEY_WS_URL = 'pulsechat_ws_url_override';
 
 export function getInitialWsUrl() {
-  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
-  const override = localStorage.getItem(STORAGE_KEY_WS_URL);
-  if (override && override.trim()) return override.trim();
   if (typeof window !== 'undefined') {
+    // Clear any stale local storage overrides
+    try {
+      localStorage.removeItem(STORAGE_KEY_WS_URL);
+    } catch {}
+
     if (window.location.protocol === 'https:') {
       return 'wss://wise-commonly-resident-cloud.trycloudflare.com';
     }
