@@ -30,8 +30,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [authError, setAuthError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const googleButtonRef = useRef<HTMLDivElement | null>(null);
-
   // Check if page was returned from a Google OAuth redirect with #access_token=...
   useEffect(() => {
     const hash = window.location.hash;
@@ -40,7 +38,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
       const accessToken = params.get('access_token');
       if (accessToken) {
         setIsLoading(true);
-        // Clear hash from URL cleanly
         window.history.replaceState(null, '', window.location.pathname);
         fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: `Bearer ${accessToken}` }
@@ -70,45 +67,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     }
   }, []);
 
-  // Decode JWT from GSI if available
-  const handleCredentialResponse = (response: any) => {
-    try {
-      if (!response || !response.credential) {
-        setAuthError('No credential returned by Google.');
-        return;
-      }
-
-      const base64Url = response.credential.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      const payload = JSON.parse(jsonPayload);
-
-      const verifiedUser: RealGoogleUser = {
-        email: payload.email,
-        name: payload.name || payload.email.split('@')[0],
-        avatarUrl: payload.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${payload.email}`
-      };
-
-      setGoogleUser(verifiedUser);
-      const suggested = payload.email
-        .split('@')[0]
-        .replace(/[^a-zA-Z0-9_-]/g, '_')
-        .toLowerCase();
-      setChosenUsername(suggested);
-      setAuthError(null);
-      setStep('set_username');
-    } catch (err: any) {
-      console.error('Failed to parse Google JWT:', err);
-      setAuthError('Failed to process Google login response.');
-    }
-  };
-
-  // Robust Direct Google OAuth Flow (Works in every browser, 100% reliable)
+  // Robust Direct Google OAuth Flow
   const handleGoogleOAuthLogin = () => {
     setAuthError(null);
     setIsLoading(true);
@@ -118,7 +77,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
       googleClientId.trim()
     )}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=email%20profile%20openid&prompt=select_account`;
 
-    // Open clean popup window
     const width = 500;
     const height = 600;
     const left = window.screenX + (window.outerWidth - width) / 2;
@@ -131,12 +89,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     );
 
     if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-      // If popup blocker blocked it, redirect directly in the same tab
       window.location.href = authUrl;
       return;
     }
 
-    // Poll the popup for the redirected access_token
     const pollTimer = window.setInterval(() => {
       try {
         if (!popup || popup.closed) {
@@ -291,14 +247,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
               <div className="p-3 rounded-xl bg-pulse-red/10 border border-pulse-red/30 flex items-start gap-2 text-xs text-pulse-red font-mono">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{authError || error}</span>
-              </div>
-            )}
-
-            {/* Live TCP Server Health Status */}
-            {tcpStatus !== 'connected' && (
-              <div className="p-2.5 rounded-xl bg-pulse-yellow/10 border border-pulse-yellow/30 flex items-center gap-2 text-xs text-pulse-yellow font-mono">
-                <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                <span>Connecting to C++ POSIX Server (127.0.0.1:9000)...</span>
               </div>
             )}
           </div>
