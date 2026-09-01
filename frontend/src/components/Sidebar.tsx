@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Hash, Users, Plus, MessageSquare, Radio, Shield, Smile, Edit3, Check, LogOut, Settings } from 'lucide-react';
+import { Hash, Users, Plus, MessageSquare, Radio, Shield, Smile, Edit3, Check, LogOut, Settings, Lock, KeyRound } from 'lucide-react';
 import { RoomItem, UserItem, UserProfile, UserStatus } from '../types';
 
 interface SidebarProps {
@@ -8,9 +8,9 @@ interface SidebarProps {
   users: UserItem[];
   profile: UserProfile | null;
   activeDmUser: string | null;
-  onSelectRoom: (roomName: string) => void;
+  onSelectRoom: (roomName: string, password?: string) => void;
   onSelectDmUser: (username: string | null) => void;
-  onJoinRoom: (roomName: string) => void;
+  onJoinRoom: (roomName: string, password?: string) => void;
   onUpdateStatus: (status: UserStatus, activityText?: string) => void;
   onLogout: () => void;
 }
@@ -27,18 +27,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onUpdateStatus,
   onLogout
 }) => {
-  const [newRoomInput, setNewRoomInput] = useState('');
-  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  // Modal states
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [isProtectedRoom, setIsProtectedRoom] = useState(false);
+  const [newRoomPassword, setNewRoomPassword] = useState('');
+
+  // Password prompt for joining locked rooms
+  const [promptTargetRoom, setPromptTargetRoom] = useState<string | null>(null);
+  const [joinPassword, setJoinPassword] = useState('');
+
+  // Status & Presence modal
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [customActivity, setCustomActivity] = useState(profile?.activityText || '');
   const [selectedStatus, setSelectedStatus] = useState<UserStatus>(profile?.status || 'online');
 
   const handleCreateRoom = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newRoomInput.trim()) {
-      onJoinRoom(newRoomInput.trim());
-      setNewRoomInput('');
-      setIsCreatingRoom(false);
+    const trimmed = newRoomName.trim();
+    if (trimmed) {
+      onJoinRoom(trimmed, isProtectedRoom ? newRoomPassword.trim() : undefined);
+      setNewRoomName('');
+      setNewRoomPassword('');
+      setIsProtectedRoom(false);
+      setShowCreateModal(false);
+    }
+  };
+
+  const handleRoomClick = (room: RoomItem) => {
+    if (room.isProtected && room.name.toLowerCase() !== currentRoom.toLowerCase()) {
+      setPromptTargetRoom(room.name);
+      setJoinPassword('');
+    } else {
+      onSelectRoom(room.name);
+    }
+  };
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (promptTargetRoom) {
+      onSelectRoom(promptTargetRoom, joinPassword);
+      setPromptTargetRoom(null);
+      setJoinPassword('');
     }
   };
 
@@ -57,7 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const displayRooms = rooms.length > 0 ? rooms : [{ name: 'general', users: 1 }];
+  const displayRooms = rooms.length > 0 ? rooms : [{ name: 'general', users: 1, isProtected: false }];
 
   return (
     <aside className="w-64 border-r border-pulse-border bg-pulse-card/50 flex flex-col shrink-0 select-none">
@@ -69,34 +99,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             Chat Rooms ({displayRooms.length})
           </span>
           <button
-            onClick={() => setIsCreatingRoom(!isCreatingRoom)}
+            onClick={() => setShowCreateModal(true)}
             className="p-1 rounded hover:bg-pulse-surface text-pulse-muted hover:text-pulse-accent transition-colors"
-            title="Create / Join Room"
+            title="Create New Room (Public or Password Protected)"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
           </button>
         </div>
-
-        {isCreatingRoom && (
-          <form onSubmit={handleCreateRoom} className="mb-2">
-            <div className="flex items-center gap-1">
-              <input
-                type="text"
-                value={newRoomInput}
-                onChange={(e) => setNewRoomInput(e.target.value)}
-                placeholder="room-name"
-                autoFocus
-                className="w-full bg-pulse-surface border border-pulse-accent/50 rounded px-2 py-1 text-xs font-mono text-white placeholder-pulse-muted/50 focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="px-2 py-1 bg-pulse-accent text-black font-mono font-bold text-xs rounded hover:bg-pulse-accent/90"
-              >
-                Join
-              </button>
-            </div>
-          </form>
-        )}
 
         <div className="space-y-0.5 overflow-y-auto max-h-48 pr-1">
           {displayRooms.map((room) => {
@@ -104,16 +113,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
             return (
               <button
                 key={room.name}
-                onClick={() => onSelectRoom(room.name)}
+                onClick={() => handleRoomClick(room)}
                 className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-mono transition-all ${
                   isActive
                     ? 'bg-pulse-accent/10 text-pulse-accent border border-pulse-accent/30 font-semibold shadow-[0_0_10px_rgba(0,240,255,0.1)]'
                     : 'text-pulse-muted hover:bg-pulse-surface hover:text-white border border-transparent'
                 }`}
               >
-                <div className="flex items-center gap-2 truncate">
+                <div className="flex items-center gap-1.5 truncate">
                   <span className={isActive ? 'text-pulse-accent' : 'text-pulse-muted/60'}>#</span>
                   <span className="truncate">{room.name}</span>
+                  {room.isProtected && (
+                    <Lock className="w-3 h-3 text-pulse-yellow shrink-0" title="Password Protected Room" />
+                  )}
                 </div>
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-pulse-surface border border-pulse-border text-pulse-muted">
                   {room.users}
@@ -172,7 +184,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </span>
                   </div>
 
-                  {/* Activity text / What they are doing */}
                   {u.activityText && (
                     <p className="text-[10px] text-pulse-accent/80 font-sans truncate pl-4 mt-0.5">
                       {u.activityText}
@@ -230,7 +241,157 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* 4. STATUS CHANGER MODAL */}
+      {/* 4. CREATE ROOM MODAL (Public vs Password Protected) */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bg-pulse-card border border-pulse-border rounded-xl shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-pulse-border pb-2">
+              <span className="font-bold text-white text-xs font-mono uppercase tracking-wider flex items-center gap-1.5">
+                <Hash className="w-4 h-4 text-pulse-accent" />
+                Create New Chat Room
+              </span>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-pulse-muted hover:text-white text-xs font-mono"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateRoom} className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-mono text-pulse-muted uppercase mb-1">
+                  Room Name <span className="text-pulse-accent">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-pulse-muted font-mono text-xs">#</span>
+                  <input
+                    type="text"
+                    value={newRoomName}
+                    onChange={(e) => setNewRoomName(e.target.value)}
+                    placeholder="crypto-lab"
+                    autoFocus
+                    required
+                    maxLength={32}
+                    className="w-full bg-pulse-surface border border-pulse-border focus:border-pulse-accent rounded-lg pl-7 pr-3 py-1.5 text-xs font-mono text-white placeholder-pulse-muted/50 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Password Protection Toggle */}
+              <div className="pt-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isProtectedRoom}
+                    onChange={(e) => setIsProtectedRoom(e.target.checked)}
+                    className="rounded border-pulse-border bg-pulse-surface text-pulse-accent focus:ring-0"
+                  />
+                  <span className="text-xs font-mono text-white flex items-center gap-1">
+                    <Lock className="w-3 h-3 text-pulse-yellow" />
+                    Protect room with password
+                  </span>
+                </label>
+              </div>
+
+              {isProtectedRoom && (
+                <div className="space-y-1 animate-in fade-in">
+                  <label className="block text-[10px] font-mono text-pulse-yellow uppercase">
+                    Room Passcode / Password <span className="text-pulse-red">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={newRoomPassword}
+                    onChange={(e) => setNewRoomPassword(e.target.value)}
+                    placeholder="Enter secret passcode"
+                    required={isProtectedRoom}
+                    className="w-full bg-pulse-surface border border-pulse-yellow/50 focus:border-pulse-yellow rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-pulse-muted/50 focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="flex-1 py-2 rounded-lg bg-pulse-surface hover:bg-pulse-hover border border-pulse-border text-xs font-mono text-pulse-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newRoomName.trim() || (isProtectedRoom && !newRoomPassword.trim())}
+                  className="flex-1 py-2 rounded-lg bg-pulse-accent hover:bg-pulse-accent/90 disabled:opacity-40 text-xs font-mono font-bold text-black flex items-center justify-center gap-1 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create Room</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. PASSWORD PROMPT MODAL (For Entering Locked Rooms) */}
+      {promptTargetRoom && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bg-pulse-card border border-pulse-yellow/50 rounded-xl shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-pulse-border pb-2">
+              <span className="font-bold text-white text-xs font-mono uppercase tracking-wider flex items-center gap-1.5">
+                <Lock className="w-4 h-4 text-pulse-yellow" />
+                Protected Room: #{promptTargetRoom}
+              </span>
+              <button
+                onClick={() => setPromptTargetRoom(null)}
+                className="text-pulse-muted hover:text-white text-xs font-mono"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-pulse-muted font-mono">
+              This channel requires a secret password to join and view chat history.
+            </p>
+
+            <form onSubmit={handlePasswordSubmit} className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-mono text-pulse-muted uppercase mb-1">
+                  Enter Room Password
+                </label>
+                <input
+                  type="password"
+                  value={joinPassword}
+                  onChange={(e) => setJoinPassword(e.target.value)}
+                  placeholder="Passcode"
+                  autoFocus
+                  required
+                  className="w-full bg-pulse-surface border border-pulse-border focus:border-pulse-accent rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-pulse-muted/50 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPromptTargetRoom(null)}
+                  className="flex-1 py-2 rounded-lg bg-pulse-surface hover:bg-pulse-hover border border-pulse-border text-xs font-mono text-pulse-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!joinPassword.trim()}
+                  className="flex-1 py-2 rounded-lg bg-pulse-yellow hover:bg-pulse-yellow/90 disabled:opacity-40 text-xs font-mono font-bold text-black flex items-center justify-center gap-1 shadow-[0_0_12px_rgba(255,214,0,0.2)]"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>Unlock & Join</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. STATUS CHANGER MODAL */}
       {showStatusModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm bg-pulse-card border border-pulse-border rounded-xl shadow-2xl p-5 space-y-4">

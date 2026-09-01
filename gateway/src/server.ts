@@ -3,6 +3,7 @@ import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import dotenv from 'dotenv';
 import { encodeFrame, MessageType, PCAPParser, DecodedFrame } from './pcap';
+import { db } from './db';
 
 dotenv.config();
 
@@ -43,6 +44,7 @@ interface ClientSession {
   avatarUrl?: string;
   status: 'online' | 'away' | 'dnd' | 'offline';
   activityText?: string;
+  currentRoom: string;
   isRegistered: boolean;
 }
 
@@ -69,6 +71,37 @@ function broadcastPresence() {
     event: 'presence_list',
     users: list
   });
+}
+
+function getEnrichedRooms(liveRooms: { name: string; users: number }[] = []) {
+  const dbRooms = db.getAllRooms();
+  const map = new Map<string, { name: string; users: number; isProtected: boolean }>();
+
+  // Add DB rooms
+  for (const r of dbRooms) {
+    map.set(r.name.toLowerCase(), {
+      name: r.name,
+      users: 0,
+      isProtected: Boolean(r.isProtected)
+    });
+  }
+
+  // Merge live user counts
+  for (const lr of liveRooms) {
+    const key = lr.name.toLowerCase();
+    const existing = map.get(key);
+    if (existing) {
+      existing.users = lr.users;
+    } else {
+      map.set(key, {
+        name: lr.name,
+        users: lr.users,
+        isProtected: false
+      });
+    }
+  }
+
+  return Array.from(map.values());
 }
 
 // ============================================================================
@@ -102,33 +135,41 @@ function initMetricsPoller() {
     for (const frame of frames) {
       if (frame.type === MessageType.METRICS_UPDATE) {
         try {
-          const parsed = JSON.parse(frame.payload);
-          latestMetricsData = parsed;
+          const raw = JSON.parse(frame.payload);
+          latestMetricsData = {
+            uptime_sec: raw.uptime_sec || 0,
+            active_connections: raw.active_connections || 0,
+            total_connections: raw.total_connections || 0,
+            msgs_per_sec: raw.msgs_per_sec || 0,
+            bytes_per_sec: raw.bytes_per_sec || 0,
+            rooms: getEnrichedRooms(raw.rooms || [])
+          };
+
           broadcastToAll({
             event: 'system_metrics',
-            data: parsed,
-            timestamp: frame.timestamp
+            data: latestMetricsData,
+            timestamp: new Date().toLocaleTimeString()
           });
-        } catch (e) {
-          log('METRICS', `Failed to parse metrics JSON: ${frame.payload}`);
+        } catch (err: any) {
+          log('METRICS_ERR', `Failed to parse metrics JSON: ${err.message}`);
         }
       }
     }
   });
 
   client.on('error', (err) => {
+    log('METRICS_ERR', `Admin metrics TCP error: ${err.message}`);
     metricsConnected = false;
-    log('METRICS', `Admin telemetry socket error: ${err.message}`);
   });
 
   client.on('close', () => {
+    log('METRICS', 'Admin metrics TCP socket closed. Reconnecting in 3s...');
     metricsConnected = false;
-    log('METRICS', 'Admin telemetry socket closed. Reconnecting in 3s...');
     setTimeout(initMetricsPoller, 3000);
   });
 }
 
-// Periodic poller for metrics
+// Periodically request metrics from C++ Server
 setInterval(() => {
   if (metricsTcpSocket && metricsConnected && !metricsTcpSocket.destroyed) {
     metricsTcpSocket.write(encodeFrame(MessageType.GET_METRICS, ''));
@@ -136,14 +177,14 @@ setInterval(() => {
 }, METRICS_POLL_INTERVAL);
 
 // ============================================================================
-// WebSocket Client Handling (1 WebSocket <-> 1 Dedicated C++ TCP Connection)
+// Main WebSocket Client Handler
 // ============================================================================
 wss.on('connection', (ws: WebSocket, req) => {
   const clientIp = req.socket.remoteAddress || 'unknown';
-  log('WS', `New WebSocket client connection from ${clientIp}`);
+  log('WS', `Client connected from ${clientIp}`);
 
-  const parser = new PCAPParser();
   const tcpSocket = new net.Socket();
+  const parser = new PCAPParser();
 
   const session: ClientSession = {
     ws,
@@ -153,6 +194,7 @@ wss.on('connection', (ws: WebSocket, req) => {
     displayName: '',
     status: 'online',
     activityText: '',
+    currentRoom: 'general',
     isRegistered: false
   };
 
@@ -198,7 +240,7 @@ wss.on('connection', (ws: WebSocket, req) => {
         }));
       }
 
-      // Broadcast raw PCAP telemetry to all clients for live stream panel
+      // Broadcast raw PCAP telemetry to all clients
       broadcastToAll({
         event: 'telemetry_event',
         eventData: {
@@ -245,25 +287,57 @@ wss.on('connection', (ws: WebSocket, req) => {
 
       switch (msg.action) {
         case 'register': {
-          session.username = msg.username;
-          session.displayName = msg.displayName || msg.username;
-          session.avatarUrl = msg.avatarUrl;
+          const userValidation = db.validateAndRegisterUser(
+            msg.username,
+            msg.email,
+            msg.displayName,
+            msg.avatarUrl,
+            msg.provider || 'google'
+          );
+
+          if (!userValidation.success) {
+            ws.send(JSON.stringify({
+              event: 'pcap_frame',
+              frame: {
+                type: MessageType.ERROR_RESPONSE,
+                typeName: 'ERROR_RESPONSE',
+                length: userValidation.error?.length || 0,
+                payload: userValidation.error || 'Username registration failed.',
+                timestamp: new Date().toLocaleTimeString()
+              }
+            }));
+            return;
+          }
+
+          const u = userValidation.user!;
+          session.username = u.username;
+          session.displayName = u.displayName;
+          session.avatarUrl = u.avatarUrl;
           session.status = msg.status || 'online';
           session.activityText = msg.activityText || '';
+          session.isRegistered = true;
 
-          userPresenceMap.set(msg.username, {
-            username: msg.username,
+          userPresenceMap.set(u.username, {
+            username: u.username,
             displayName: session.displayName,
             avatarUrl: session.avatarUrl,
-            email: msg.email,
+            email: u.email,
             status: session.status,
             activityText: session.activityText,
-            room: 'general',
+            room: session.currentRoom || 'general',
             lastSeen: Date.now()
           });
           broadcastPresence();
 
-          frameBuffer = encodeFrame(MessageType.USER_REGISTER, msg.username);
+          frameBuffer = encodeFrame(MessageType.USER_REGISTER, u.username);
+
+          // Send initial #general history upon registration
+          const history = db.getRoomHistory(session.currentRoom || 'general', 50);
+          ws.send(JSON.stringify({
+            event: 'room_history',
+            room: session.currentRoom || 'general',
+            messages: history
+          }));
           break;
         }
 
@@ -282,27 +356,74 @@ wss.on('connection', (ws: WebSocket, req) => {
           break;
         }
 
-        case 'chat':
+        case 'chat': {
+          if (session.username && msg.text) {
+            db.addMessage(
+              session.currentRoom || 'general',
+              session.username,
+              msg.text,
+              session.displayName,
+              session.avatarUrl
+            );
+          }
           frameBuffer = encodeFrame(MessageType.CHAT_MESSAGE, msg.text);
           break;
+        }
 
         case 'join_room': {
+          const roomName = (msg.room || 'general').trim();
+          const password = msg.password;
+
+          // Check DB for password protection
+          const roomCheck = db.createOrJoinRoom(roomName, password, session.username);
+          if (!roomCheck.success) {
+            ws.send(JSON.stringify({
+              event: 'pcap_frame',
+              frame: {
+                type: MessageType.ERROR_RESPONSE,
+                typeName: 'ERROR_RESPONSE',
+                length: roomCheck.error?.length || 0,
+                payload: roomCheck.error || 'Cannot enter protected room.',
+                timestamp: new Date().toLocaleTimeString()
+              }
+            }));
+            return;
+          }
+
+          session.currentRoom = roomName;
           if (session.username) {
             const p = userPresenceMap.get(session.username);
-            if (p) p.room = msg.room;
+            if (p) p.room = roomName;
             broadcastPresence();
           }
-          frameBuffer = encodeFrame(MessageType.JOIN_ROOM, msg.room);
+
+          frameBuffer = encodeFrame(MessageType.JOIN_ROOM, roomName);
+
+          // Send historical messages for this room
+          const history = db.getRoomHistory(roomName, 50);
+          ws.send(JSON.stringify({
+            event: 'room_history',
+            room: roomName,
+            messages: history
+          }));
           break;
         }
 
         case 'leave_room': {
+          session.currentRoom = 'general';
           if (session.username) {
             const p = userPresenceMap.get(session.username);
             if (p) p.room = 'general';
             broadcastPresence();
           }
           frameBuffer = encodeFrame(MessageType.LEAVE_ROOM, msg.room || '');
+
+          const history = db.getRoomHistory('general', 50);
+          ws.send(JSON.stringify({
+            event: 'room_history',
+            room: 'general',
+            messages: history
+          }));
           break;
         }
 

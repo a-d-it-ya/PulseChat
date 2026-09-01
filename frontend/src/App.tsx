@@ -54,12 +54,12 @@ export function App() {
           users={users}
           profile={profile}
           activeDmUser={activeDmUser}
-          onSelectRoom={(r) => {
-            joinRoom(r);
+          onSelectRoom={(r, password) => {
+            joinRoom(r, password);
             setActiveDmUser(null);
           }}
           onSelectDmUser={(u) => setActiveDmUser(u)}
-          onJoinRoom={(r) => joinRoom(r)}
+          onJoinRoom={(r, password) => joinRoom(r, password)}
           onUpdateStatus={updateStatus}
           onLogout={logout}
         />
@@ -70,6 +70,7 @@ export function App() {
           activeDmUser={activeDmUser}
           currentUsername={profile?.username || ''}
           messages={messages}
+          users={users}
           onSendMessage={sendMessage}
           onLeaveRoom={leaveRoom}
           onClearDm={() => setActiveDmUser(null)}

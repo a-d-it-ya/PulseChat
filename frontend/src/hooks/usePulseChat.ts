@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageType, ChatMessage, RoomItem, UserItem, SystemMetrics, TelemetryEvent, UserProfile, UserStatus } from '../types';
+import { notificationAudio } from '../utils/audio';
 
 const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:3001`;
 
@@ -27,7 +28,7 @@ export function usePulseChat() {
   });
   const [activeDmUser, setActiveDmUser] = useState<string | null>(null);
 
-  // Stored chat messages from localStorage
+  // Messages list
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_MESSAGES);
@@ -37,11 +38,12 @@ export function usePulseChat() {
     }
   });
 
-  const [rooms, setRooms] = useState<RoomItem[]>([{ name: 'general', users: 0 }]);
+  const [rooms, setRooms] = useState<RoomItem[]>([{ name: 'general', users: 0, isProtected: false }]);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [telemetryEvents, setTelemetryEvents] = useState<TelemetryEvent[]>([]);
   const [registrationError, setRegistrationError] = useState<string | null>(null);
+  const [mentionCount, setMentionCount] = useState<number>(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -53,10 +55,10 @@ export function usePulseChat() {
   const currentRoomRef = useRef(currentRoom);
   currentRoomRef.current = currentRoom;
 
-  // Persist messages whenever updated (keep up to last 200 messages)
+  // Persist messages whenever updated (keep up to last 300 messages)
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(messages.slice(-200)));
+      localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(messages.slice(-300)));
     } catch {}
   }, [messages]);
 
@@ -74,11 +76,40 @@ export function usePulseChat() {
     localStorage.setItem(STORAGE_KEY_ROOM, currentRoom);
   }, [currentRoom]);
 
+  // Update document title on mention
+  useEffect(() => {
+    if (mentionCount > 0) {
+      document.title = `(${mentionCount}) PulseChat — Mentioned!`;
+    } else {
+      document.title = `PulseChat — High-Concurrency Systems Messaging`;
+    }
+  }, [mentionCount]);
+
+  // Reset mention count on focus
+  useEffect(() => {
+    const handleFocus = () => {
+      setMentionCount(0);
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
   // Helper to add message
   const appendMessage = useCallback((msg: Omit<ChatMessage, 'id'>) => {
+    const isMeMentioned = Boolean(
+      profileRef.current?.username &&
+      msg.text.toLowerCase().includes(`@${profileRef.current.username.toLowerCase()}`)
+    );
+
+    if (isMeMentioned && !msg.isSystem && msg.sender !== profileRef.current?.username) {
+      notificationAudio.playMentionChime();
+      setMentionCount((prev) => prev + 1);
+    }
+
     const newMsg: ChatMessage = {
       ...msg,
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      isMentioned: isMeMentioned
     };
     setMessages((prev) => [...prev, newMsg]);
   }, []);
@@ -110,6 +141,7 @@ export function usePulseChat() {
           displayName: profileRef.current.displayName,
           email: profileRef.current.email,
           avatarUrl: profileRef.current.avatarUrl,
+          provider: profileRef.current.provider,
           status: profileRef.current.status,
           activityText: profileRef.current.activityText
         }));
@@ -137,7 +169,7 @@ export function usePulseChat() {
           setUsers(data.users);
         }
 
-        // 3. Real C++ Server Metrics
+        // 3. Real C++ Server Metrics & Enriched Rooms
         if (data.event === 'system_metrics' && data.data) {
           setMetrics(data.data);
           if (data.data.rooms && Array.isArray(data.data.rooms)) {
@@ -145,12 +177,35 @@ export function usePulseChat() {
           }
         }
 
-        // 4. Live Telemetry Event
+        // 4. Historical Room Messages Replay
+        if (data.event === 'room_history' && Array.isArray(data.messages)) {
+          const myUser = profileRef.current?.username?.toLowerCase();
+          const loaded: ChatMessage[] = data.messages.map((m: any) => ({
+            id: m.id,
+            type: MessageType.CHAT_MESSAGE,
+            sender: m.sender,
+            displayName: m.displayName,
+            avatarUrl: m.avatarUrl,
+            room: m.room,
+            text: m.text,
+            timestamp: m.timestamp,
+            isMentioned: Boolean(myUser && m.text?.toLowerCase().includes(`@${myUser}`))
+          }));
+
+          // Merge room history without duplicates
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((p) => p.id));
+            const newHistory = loaded.filter((l) => !existingIds.has(l.id));
+            return [...prev, ...newHistory];
+          });
+        }
+
+        // 5. Live Telemetry Event
         if (data.event === 'telemetry_event' && data.eventData) {
           setTelemetryEvents((prev) => [data.eventData, ...prev.slice(0, 79)]);
         }
 
-        // 5. PCAP Frame from C++ Server
+        // 6. PCAP Frame from C++ Server
         if (data.event === 'pcap_frame' && data.frame) {
           const frame = data.frame;
           const timeStr = frame.timestamp || new Date().toLocaleTimeString();
@@ -159,7 +214,7 @@ export function usePulseChat() {
             case MessageType.SERVER_NOTIFICATION: {
               const payload: string = frame.payload;
 
-              // Filter out room/user list dumps from chat feed
+              // Filter out raw room/user list dumps
               if (payload.startsWith('=== Active Rooms') || payload.startsWith('=== Online Users')) {
                 return;
               }
@@ -312,7 +367,7 @@ export function usePulseChat() {
     };
   }, [sendAction]);
 
-  // Register or login
+  // Register / login
   const login = useCallback((userProfile: UserProfile) => {
     setProfile(userProfile);
     setIsRegistered(true);
@@ -322,12 +377,13 @@ export function usePulseChat() {
       displayName: userProfile.displayName,
       email: userProfile.email,
       avatarUrl: userProfile.avatarUrl,
+      provider: userProfile.provider,
       status: userProfile.status,
       activityText: userProfile.activityText
     });
   }, [sendAction]);
 
-  // Update Status & Activity ("what they are doing")
+  // Update Status & Activity
   const updateStatus = useCallback((status: UserStatus, activityText?: string) => {
     if (!profile) return;
     const updated: UserProfile = {
@@ -342,7 +398,7 @@ export function usePulseChat() {
     });
   }, [profile, sendAction]);
 
-  // Logout / Switch account
+  // Logout
   const logout = useCallback(() => {
     setProfile(null);
     setIsRegistered(false);
@@ -354,10 +410,10 @@ export function usePulseChat() {
     }
   }, []);
 
-  const joinRoom = useCallback((roomName: string) => {
+  const joinRoom = useCallback((roomName: string, password?: string) => {
     const trimmed = roomName.trim();
     if (!trimmed) return;
-    sendAction('join_room', { room: trimmed });
+    sendAction('join_room', { room: trimmed, password });
     setActiveDmUser(null);
   }, [sendAction]);
 
@@ -377,8 +433,10 @@ export function usePulseChat() {
 
     if (input.startsWith('/')) {
       if (input.startsWith('/join ')) {
-        const r = input.substring(6).trim();
-        if (r) joinRoom(r);
+        const parts = input.substring(6).trim().split(' ');
+        const r = parts[0];
+        const pwd = parts[1];
+        if (r) joinRoom(r, pwd);
       } else if (input === '/leave') {
         leaveRoom();
       } else if (input === '/rooms') {
@@ -404,7 +462,7 @@ export function usePulseChat() {
         appendMessage({
           type: MessageType.SERVER_NOTIFICATION,
           sender: 'HELP',
-          text: 'Available Commands: /join <room>, /leave, /rooms, /users, /msg <user> <message>, /help',
+          text: 'Available Commands: /join <room> [password], /leave, /rooms, /users, /msg <user> <message>, /help',
           timestamp: new Date().toLocaleTimeString(),
           isSystem: true
         });
@@ -442,6 +500,7 @@ export function usePulseChat() {
     metrics,
     telemetryEvents,
     registrationError,
+    mentionCount,
     login,
     logout,
     updateStatus,
