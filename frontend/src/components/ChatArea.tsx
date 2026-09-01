@@ -371,47 +371,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
       )}
 
-      {/* 4. SLASH COMMAND HELPER CHIPS */}
-      <div className="px-4 py-1.5 border-t border-pulse-border/50 bg-pulse-surface/20 flex items-center gap-1.5 overflow-x-auto text-[11px] font-mono select-none">
-        <span className="text-pulse-muted text-[10px] uppercase mr-1">Quick:</span>
-        <button
-          type="button"
-          onClick={() => insertCommand('/join ')}
-          className="px-2 py-0.5 rounded bg-pulse-surface hover:bg-pulse-card border border-pulse-border text-pulse-accent hover:border-pulse-accent transition-all"
-        >
-          /join &lt;room&gt; [password]
-        </button>
-        <button
-          type="button"
-          onClick={() => insertCommand('/msg ')}
-          className="px-2 py-0.5 rounded bg-pulse-surface hover:bg-pulse-card border border-pulse-border text-pulse-magenta hover:border-pulse-magenta transition-all"
-        >
-          /msg &lt;user&gt;
-        </button>
-        <button
-          type="button"
-          onClick={() => insertCommand('/rooms')}
-          className="px-2 py-0.5 rounded bg-pulse-surface hover:bg-pulse-card border border-pulse-border text-pulse-muted hover:text-white transition-all"
-        >
-          /rooms
-        </button>
-        <button
-          type="button"
-          onClick={() => insertCommand('/users')}
-          className="px-2 py-0.5 rounded bg-pulse-surface hover:bg-pulse-card border border-pulse-border text-pulse-muted hover:text-white transition-all"
-        >
-          /users
-        </button>
-        <button
-          type="button"
-          onClick={() => insertCommand('/help')}
-          className="px-2 py-0.5 rounded bg-pulse-surface hover:bg-pulse-card border border-pulse-border text-pulse-muted hover:text-white transition-all"
-        >
-          /help
-        </button>
-      </div>
-
-      {/* 5. INPUT FIELD */}
+      {/* 4. INPUT FIELD */}
       <form onSubmit={handleSend} className="p-3 border-t border-pulse-border bg-pulse-surface/40">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
