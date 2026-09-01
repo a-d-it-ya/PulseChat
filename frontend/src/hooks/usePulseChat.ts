@@ -329,7 +329,14 @@ export function usePulseChat() {
               if (!profileRef.current) {
                 setRegistrationError(frame.payload);
               }
-              // Show as Popup Toast Alert instead of polluting chat feed!
+              if (
+                frame.payload.includes('protected room') ||
+                frame.payload.includes('Password') ||
+                frame.payload.includes('Access denied')
+              ) {
+                setCurrentRoom('general');
+              }
+              // Show as Popup Toast Alert that auto-disappears!
               setToast({
                 text: frame.payload,
                 type: 'error',
