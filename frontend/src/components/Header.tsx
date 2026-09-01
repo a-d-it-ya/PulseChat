@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Cpu, PanelRightOpen, PanelRightClose, Mail, ShieldCheck } from 'lucide-react';
+import { Activity, Cpu, PanelRightOpen, PanelRightClose, Mail, ShieldCheck, LogOut } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface HeaderProps {
