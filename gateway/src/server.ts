@@ -456,7 +456,7 @@ wss.on('connection', (ws: WebSocket, req) => {
           const text = (msg.text || '').trim();
           if (session.username && target && text) {
             // 1. Permanently store DM in database so it survives offline recipient
-            const savedMsg = db.saveDirectMessage(
+            db.saveDirectMessage(
               session.username,
               target,
               text,
@@ -464,25 +464,7 @@ wss.on('connection', (ws: WebSocket, req) => {
               session.avatarUrl
             );
 
-            // 2. Deliver in real-time to recipient if they are currently online
-            for (const [otherWs, otherSession] of activeSessions.entries()) {
-              if (otherSession.username && otherSession.username.toLowerCase() === target) {
-                if (otherWs.readyState === WebSocket.OPEN) {
-                  otherWs.send(JSON.stringify({
-                    event: 'pcap_frame',
-                    frame: {
-                      type: MessageType.PRIVATE_MESSAGE,
-                      typeName: 'PRIVATE_MESSAGE',
-                      length: text.length,
-                      payload: `[DM from ${session.username}]: ${text}`,
-                      timestamp: savedMsg.timestamp
-                    }
-                  }));
-                }
-              }
-            }
-
-            // 3. Send to C++ reactor for metrics / socket telemetry
+            // 2. Route through C++ reactor (delivers to online recipient's socket and updates metrics)
             frameBuffer = encodeFrame(MessageType.PRIVATE_MESSAGE, `${target}:${text}`);
           }
           break;

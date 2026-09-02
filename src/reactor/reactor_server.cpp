@@ -323,7 +323,8 @@ void ReactorServer::process_message(int client_fd, const Message& msg) {
                 send_message_to_fd(*target_fd, Message(MessageType::PRIVATE_MESSAGE, pm_payload));
                 send_message_to_fd(client_fd, Message::make_notify("[DM to " + target_user + "]: " + text));
             } else {
-                send_message_to_fd(client_fd, Message::make_error("User '" + target_user + "' not found or offline"));
+                // Recipient is offline; gateway persists to DB for delivery upon login
+                send_message_to_fd(client_fd, Message::make_notify("[DM to " + target_user + "]: " + text));
             }
             break;
         }

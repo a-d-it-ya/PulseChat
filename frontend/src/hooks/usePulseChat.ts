@@ -149,7 +149,23 @@ export function usePulseChat() {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       isMentioned: isMeMentioned
     };
-    setMessages((prev) => [...prev, newMsg]);
+
+    setMessages((prev) => {
+      // Deduplicate: ignore if last 15 messages already contain the exact same sender, scope, and text
+      const newSender = (newMsg.sender || '').trim().toLowerCase();
+      const newScope = (newMsg.room || newMsg.targetUser || '').trim().toLowerCase();
+      const newText = (newMsg.text || '').trim();
+
+      const isDup = prev.slice(-15).some((p) => {
+        const pSender = (p.sender || '').trim().toLowerCase();
+        const pScope = (p.room || p.targetUser || '').trim().toLowerCase();
+        const pText = (p.text || '').trim();
+        return pSender === newSender && pScope === newScope && pText === newText;
+      });
+
+      if (isDup) return prev;
+      return [...prev, newMsg];
+    });
   }, []);
 
   // Send action to gateway
@@ -255,8 +271,12 @@ export function usePulseChat() {
 
           // Merge room history without duplicates
           setMessages((prev) => {
-            const existingIds = new Set(prev.map((p) => p.id));
-            const newHistory = loaded.filter((l) => !existingIds.has(l.id));
+            const seenKeys = new Set(
+              prev.map((p) => `${(p.sender || '').toLowerCase()}|${(p.room || '').toLowerCase()}|${(p.text || '').trim()}`)
+            );
+            const newHistory = loaded.filter(
+              (l) => !seenKeys.has(`${(l.sender || '').toLowerCase()}|${(l.room || '').toLowerCase()}|${(l.text || '').trim()}`)
+            );
             return [...prev, ...newHistory];
           });
         }
@@ -278,8 +298,12 @@ export function usePulseChat() {
           }));
 
           setMessages((prev) => {
-            const existingIds = new Set(prev.map((p) => p.id));
-            const newDms = loadedDms.filter((l) => !existingIds.has(l.id));
+            const seenKeys = new Set(
+              prev.map((p) => `${(p.sender || '').toLowerCase()}|${(p.targetUser || '').toLowerCase()}|${(p.text || '').trim()}`)
+            );
+            const newDms = loadedDms.filter(
+              (l) => !seenKeys.has(`${(l.sender || '').toLowerCase()}|${(l.targetUser || '').toLowerCase()}|${(l.text || '').trim()}`)
+            );
             return [...prev, ...newDms];
           });
         }
